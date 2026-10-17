@@ -1,6 +1,6 @@
-# Mouchak Cosmetics Platform
+# Mollari Platform
 
-Mouchak Cosmetics is a comprehensive e-commerce and inventory management platform designed to handle online sales, POS operations, and multi-branch inventory logistics.
+Mollari is a comprehensive e-commerce and inventory management platform designed to handle online sales, POS operations, and multi-branch inventory logistics.
 
 ## 🌟 Key Features
 
@@ -12,7 +12,7 @@ Mouchak Cosmetics is a comprehensive e-commerce and inventory management platfor
 
 ## 🏗️ Architecture
 
-Below is the high-level architecture diagram of the Mouchak Cosmetics platform:
+Below is the high-level architecture diagram of the Mollari platform:
 
 ```mermaid
 flowchart TD
@@ -62,7 +62,7 @@ flowchart TD
 The project uses a monorepo setup with a highly modularized, domain-driven architecture for both the frontend and backend.
 
 ```text
-Mouchak Cosmetics/
+Mollari/
 ├── client/                     # Next.js Frontend
 │   ├── src/
 │   │   ├── app/                # Next.js App Router (Pages & Layouts)
@@ -125,7 +125,7 @@ Mouchak Cosmetics/
 1. **Clone the repository:**
    ```bash
    git clone <repo-url>
-   cd "Mouchak Cosmetics"
+   cd "Mollari"
    ```
 
 2. **Setup Backend:**
