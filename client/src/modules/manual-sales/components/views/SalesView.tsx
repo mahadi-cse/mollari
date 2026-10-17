@@ -746,8 +746,17 @@ export default function SalesView({
                                         prev.map((li, i) => {
                                           if (i !== idx) return li;
                                           const matchedSize = li.sizes.find((sz: any) => sz.name === selectedName);
-                                          const basePrice = Number(products.find((p) => p.id === li.productId)?.price ?? 0);
-                                          const newPrice = matchedSize && matchedSize.priceOverride ? Number(matchedSize.priceOverride) : basePrice;
+                                          const metaProduct = getProductMeta(li.productId) as any;
+                                          const branchProduct = searchableProducts.find((p) => p.id === li.productId);
+                                          const basePrice = Number(
+                                            branchProduct?.price ??
+                                            metaProduct?.price ??
+                                            products.find((p) => p.id === li.productId)?.price ??
+                                            li.unitPrice ??
+                                            0
+                                          );
+                                          const hasOverride = matchedSize && matchedSize.priceOverride !== null && matchedSize.priceOverride !== undefined && Number(matchedSize.priceOverride) > 0;
+                                          const newPrice = hasOverride ? Number(matchedSize.priceOverride) : basePrice;
                                           return { ...li, sizeName: selectedName, unitPrice: newPrice, total: li.qty * newPrice };
                                         })
                                       );
@@ -851,8 +860,17 @@ export default function SalesView({
                                     prev.map((li, i) => {
                                       if (i !== idx) return li;
                                       const matchedSize = li.sizes.find((sz: any) => sz.name === selectedName);
-                                      const basePrice = Number(products.find((p) => p.id === li.productId)?.price ?? 0);
-                                      const newPrice = matchedSize && matchedSize.priceOverride ? Number(matchedSize.priceOverride) : basePrice;
+                                      const metaProduct = getProductMeta(li.productId) as any;
+                                      const branchProduct = searchableProducts.find((p) => p.id === li.productId);
+                                      const basePrice = Number(
+                                        branchProduct?.price ??
+                                        metaProduct?.price ??
+                                        products.find((p) => p.id === li.productId)?.price ??
+                                        li.unitPrice ??
+                                        0
+                                      );
+                                      const hasOverride = matchedSize && matchedSize.priceOverride !== null && matchedSize.priceOverride !== undefined && Number(matchedSize.priceOverride) > 0;
+                                      const newPrice = hasOverride ? Number(matchedSize.priceOverride) : basePrice;
                                       return { ...li, sizeName: selectedName, unitPrice: newPrice, total: li.qty * newPrice };
                                     })
                                   );

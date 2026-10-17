@@ -54,9 +54,6 @@ export default function InventoryView({
   const { data: productsWithSizes = [] } = useListProducts({ limit: 500 } as any, {
     queryKey: ['products', 'list', 'inventory-sizes', { limit: 500 }],
   });
-  const getProductMeta = (productId: number) =>
-    productsWithSizes.find((p: any) => p.id === productId);
-
   const branchInventoryData = ((branchInventoryQuery as any).data?.data || []) as any[];
   const allInventoryData = ((allInventoryQuery as any).data?.data || []) as any[];
   const resolveBranchId = (item: any) => {
@@ -82,21 +79,17 @@ export default function InventoryView({
     }));
 
   const allProducts = normalizeInventoryRows(allInventoryData);
-  const branchProducts = branchInventoryData.map((item: any) => ({
-    id: item.productId || item.product?.id,
-    name: item.product?.name || t.unknownProduct,
-    sku: item.product?.sku || t.na,
-    stock: item.availableQty ?? item.quantity ?? 0,
-    sizes: item.product?.sizes || [],
-    branchId: resolveBranchId(item),
-    warehouse: item.warehouse || t.na,
-    status: 'active',
-    batchName: item.batchName || t.na,
-    manufactureDate: item.manufactureDate ? new Date(item.manufactureDate).toLocaleDateString() : t.na,
-    expiryDate: item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : t.na,
-    rawMfgDate: item.manufactureDate || '',
-    rawExpDate: item.expiryDate || '',
-  }));
+  const branchProducts = normalizeInventoryRows(branchInventoryData);
+  const getProductMeta = (productId: number) => {
+    const liveProd = branchProducts.find((p: any) => p.id === productId) || allProducts.find((p: any) => p.id === productId);
+    const cachedMeta = productsWithSizes.find((p: any) => p.id === productId);
+    if (!liveProd) return cachedMeta;
+    return {
+      ...cachedMeta,
+      ...liveProd,
+      sizes: (liveProd.sizes && liveProd.sizes.length > 0) ? liveProd.sizes : (cachedMeta?.sizes || []),
+    };
+  };
   const viewProducts = branchProducts;
   const modalProducts = useMemo(() => {
     if (!formBranchId) return [];
@@ -306,12 +299,12 @@ export default function InventoryView({
       if (sizes.length > 0) {
         const initSizes: Record<string, string> = {};
         sizes.forEach((s: any) => {
-          initSizes[s.name] = (s.quantity ?? 0).toString();
+          initSizes[s.name] = (s.quantity && s.quantity > 0) ? s.quantity.toString() : '';
         });
         setSizeStocks(initSizes);
         if (!formSizeName || !sizes.some((s: any) => s.name === formSizeName)) {
           setFormSizeName(sizes[0]?.name || '');
-          setFormStockValue((sizes[0]?.quantity ?? 0).toString());
+          setFormStockValue((sizes[0]?.quantity && sizes[0].quantity > 0) ? sizes[0].quantity.toString() : '');
         }
       } else {
         setSizeStocks({});
@@ -569,8 +562,7 @@ export default function InventoryView({
                         <div>
                           <span className="font-bold text-[14px]">{p.stock}</span>
                           {(() => {
-                            const meta = getProductMeta(p.id) || p;
-                            const sizes = (meta as any)?.sizes || [];
+                            const sizes = (p.sizes && p.sizes.length > 0) ? p.sizes : ((getProductMeta(p.id) as any)?.sizes || []);
                             if (sizes.length === 0) return null;
                             return (
                               <div className="mt-1 flex flex-wrap gap-1">
@@ -649,16 +641,16 @@ export default function InventoryView({
                             setMfgDate(p.rawMfgDate ? p.rawMfgDate.split('T')[0] : '');
                             setExpDate(p.rawExpDate ? p.rawExpDate.split('T')[0] : '');
 
-                            const meta = getProductMeta(p.id) || p;
+                            const meta = (p.sizes && p.sizes.length > 0) ? p : (getProductMeta(p.id) || p);
                             const sizes = (meta as any)?.sizes || [];
                             if (sizes.length > 0) {
                               const initSizes: Record<string, string> = {};
                               sizes.forEach((s: any) => {
-                                initSizes[s.name] = (s.quantity ?? 0).toString();
+                                initSizes[s.name] = (s.quantity && s.quantity > 0) ? s.quantity.toString() : '';
                               });
                               setSizeStocks(initSizes);
                               setFormSizeName(sizes[0]?.name || '');
-                              setFormStockValue((sizes[0]?.quantity ?? 0).toString());
+                              setFormStockValue((sizes[0]?.quantity && sizes[0].quantity > 0) ? sizes[0].quantity.toString() : '');
                               setSizeAdjustmentMode('all');
                             } else {
                               setSizeStocks({});
@@ -851,7 +843,10 @@ export default function InventoryView({
                           min="0"
                           value={formStockValue}
                           onChange={(e) => setFormStockValue(e.target.value)}
-                          placeholder={formMode === 'set' ? 'e.g., 50' : 'e.g., 10'}
+                          onFocus={(e) => {
+                            if (e.target.value === '0') setFormStockValue('');
+                          }}
+                          placeholder={formMode === 'set' ? '0' : 'e.g., 10'}
                           className="w-full rounded-lg px-3 py-2.5 text-[13px] outline-none"
                           style={{ border: `1px solid ${Theme.border}`, color: Theme.fg }}
                         />
@@ -941,10 +936,15 @@ export default function InventoryView({
                                   type="number"
                                   min="0"
                                   className="w-full box-border rounded-lg border border-border bg-white px-3 py-1.5 text-[13px] text-foreground outline-none font-bold"
-                                  value={sizeStocks[s.name] ?? (s.quantity ?? 0).toString()}
+                                  value={sizeStocks[s.name] !== undefined ? sizeStocks[s.name] : ((s.quantity && s.quantity > 0) ? s.quantity.toString() : '')}
                                   onChange={(e) => {
                                     const val = e.target.value;
                                     setSizeStocks(prev => ({ ...prev, [s.name]: val }));
+                                  }}
+                                  onFocus={(e) => {
+                                    if (e.target.value === '0') {
+                                      setSizeStocks(prev => ({ ...prev, [s.name]: '' }));
+                                    }
                                   }}
                                   placeholder="0"
                                 />

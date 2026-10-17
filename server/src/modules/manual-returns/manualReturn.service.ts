@@ -3,6 +3,7 @@ import { prisma } from '../../config/database';
 import { ConflictError, NotFoundError } from '../../shared/utils/AppError';
 import { parsePagination } from '../../shared/utils/pagination';
 import { CreateManualReturnInput } from './manualReturn.schema';
+import { cacheInvalidatePattern } from '../../shared/utils/cache';
 
 const toNumber = (value: Prisma.Decimal | number | string) => Number(value);
 
@@ -147,6 +148,13 @@ export class ManualReturnService {
           lineTotal: toNumber(item.lineTotal),
         })),
       };
+    }).then(async (result) => {
+      await Promise.all([
+        cacheInvalidatePattern('analytics:overview:*'),
+        cacheInvalidatePattern('products:list:*'),
+        cacheInvalidatePattern('products:slug:*'),
+      ]);
+      return result;
     });
   }
 

@@ -3,6 +3,7 @@ import { ConflictError, NotFoundError } from '../../shared/utils/AppError';
 import { parsePagination } from '../../shared/utils/pagination';
 import { AdjustStockInput, TransferStockInput, ReconcileStockInput } from './inventory.schema';
 import { InventoryTransactionType, Prisma } from '@prisma/client';
+import { cacheInvalidatePattern } from '../../shared/utils/cache';
 
 export class InventoryService {
   private async ensureBranchId(warehouseId?: number, tx: Prisma.TransactionClient = prisma) {
@@ -207,6 +208,13 @@ export class InventoryService {
       });
 
       return transaction;
+    }).then(async (result) => {
+      await Promise.all([
+        cacheInvalidatePattern('analytics:overview:*'),
+        cacheInvalidatePattern('products:list:*'),
+        cacheInvalidatePattern('products:slug:*'),
+      ]);
+      return result;
     });
   }
 

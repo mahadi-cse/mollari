@@ -21,8 +21,24 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
   // Handle Prisma errors
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === 'P2002') {
+      const target = (err.meta?.target as string[] | string) || [];
+      const targetArr = Array.isArray(target) ? target : [target];
+      let message = 'Unique constraint violation: Resource already exists';
+
+      if (targetArr.includes('productId') && targetArr.includes('name')) {
+        message = 'Duplicate size name: Each product size must have a unique name (e.g. S, M, L).';
+      } else if (targetArr.includes('sku')) {
+        message = 'A product with this SKU already exists.';
+      } else if (targetArr.includes('slug')) {
+        message = 'A product with this name already exists.';
+      } else if (targetArr.includes('email')) {
+        message = 'An account with this email already exists.';
+      } else if (targetArr.length > 0) {
+        message = `Unique constraint violation: Duplicate value for ${targetArr.join(', ')}.`;
+      }
+
       return res.status(409).json(
-        fail('Unique constraint violation: Resource already exists', 'CONFLICT')
+        fail(message, 'CONFLICT')
       );
     }
 

@@ -208,9 +208,13 @@ export class ManualSaleService {
         })),
       };
     }).then(async (result) => {
-      // Bust overview & inventory analytics caches so the dashboard
-      // overview reflects this sale immediately after it is recorded.
-      await cacheInvalidatePattern('analytics:overview:*');
+      // Bust overview & inventory analytics caches and product list caches
+      // so the dashboard overview and products reflect this sale immediately.
+      await Promise.all([
+        cacheInvalidatePattern('analytics:overview:*'),
+        cacheInvalidatePattern('products:list:*'),
+        cacheInvalidatePattern('products:slug:*'),
+      ]);
       return result;
     });
   }

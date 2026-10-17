@@ -10,7 +10,7 @@ const productSizeSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-export const createProductSchema = z.object({
+const baseProductSchema = z.object({
   name: z.string().min(1, 'Product name is required'),
   description: z.string().optional(),
   shortDescription: z.string().optional(),
@@ -31,7 +31,21 @@ export const createProductSchema = z.object({
   sizes: z.array(productSizeSchema).optional(),
 });
 
-export const updateProductSchema = createProductSchema.partial();
+const validateUniqueSizes = (sizes?: Array<{ name: string }>) => {
+  if (!sizes || sizes.length <= 1) return true;
+  const names = sizes.map((s) => s.name.trim().toLowerCase());
+  return new Set(names).size === names.length;
+};
 
-export type CreateProductInput = z.infer<typeof createProductSchema>;
+export const createProductSchema = baseProductSchema.refine((data) => validateUniqueSizes(data.sizes), {
+  message: 'Each product size must have a unique name',
+  path: ['sizes'],
+});
+
+export const updateProductSchema = baseProductSchema.partial().refine((data) => validateUniqueSizes(data.sizes), {
+  message: 'Each product size must have a unique name',
+  path: ['sizes'],
+});
+
+export type CreateProductInput = z.infer<typeof baseProductSchema>;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;

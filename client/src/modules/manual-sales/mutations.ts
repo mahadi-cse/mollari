@@ -13,6 +13,7 @@ export const useCreateManualSaleMutation = (options?: any) => {
       queryClient.invalidateQueries({ queryKey: MANUAL_SALES_QUERY_KEYS.all });
       queryClient.invalidateQueries({ queryKey: INVENTORY_QUERY_KEYS.all });
       queryClient.invalidateQueries({ queryKey: ANALYTICS_QUERY_KEYS.all });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
     },
     ...options,
   });

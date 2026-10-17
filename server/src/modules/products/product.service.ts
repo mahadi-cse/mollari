@@ -43,6 +43,13 @@ export class ProductService {
       counterSlug++;
     }
 
+    if (data.sizes && data.sizes.length > 0) {
+      const normalizedNames = data.sizes.map((s) => s.name.trim().toLowerCase());
+      if (new Set(normalizedNames).size !== normalizedNames.length) {
+        throw new ConflictError('Each product size must have a unique name (e.g. S, M, L).');
+      }
+    }
+
     const product = await prisma.product.create({
       data: {
         name: data.name,
@@ -65,7 +72,7 @@ export class ProductService {
           ? {
               sizes: {
                 create: data.sizes.map((s, i) => ({
-                  name: s.name,
+                  name: s.name.trim(),
                   sortOrder: s.sortOrder ?? i,
                   imageUrl: s.imageUrl || null,
                   priceOverride: s.priceOverride || null,
@@ -242,12 +249,19 @@ export class ProductService {
     if (data.unitLabel !== undefined) updateData.unitLabel = data.unitLabel;
 
     if (data.sizes !== undefined) {
+      if (data.sizes.length > 0) {
+        const normalizedNames = data.sizes.map((s) => s.name.trim().toLowerCase());
+        if (new Set(normalizedNames).size !== normalizedNames.length) {
+          throw new ConflictError('Each product size must have a unique name (e.g. S, M, L).');
+        }
+      }
+
       await prisma.productSize.deleteMany({ where: { productId: id } });
       if (data.sizes.length > 0) {
         await prisma.productSize.createMany({
           data: data.sizes.map((s, i) => ({
             productId: id,
-            name: s.name,
+            name: s.name.trim(),
             sortOrder: s.sortOrder ?? i,
             imageUrl: s.imageUrl || null,
             priceOverride: s.priceOverride || null,

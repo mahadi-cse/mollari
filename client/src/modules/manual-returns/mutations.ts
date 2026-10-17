@@ -11,6 +11,7 @@ export const useCreateManualReturnMutation = (options?: any) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: MANUAL_RETURNS_QUERY_KEYS.all });
       queryClient.invalidateQueries({ queryKey: INVENTORY_QUERY_KEYS.all });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
     },
     ...options,
   });

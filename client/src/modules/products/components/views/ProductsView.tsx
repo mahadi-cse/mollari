@@ -110,7 +110,7 @@ export default function ProductsView() {
       diffPricePerSize,
       sizes: existingSizes.map((s: any) => ({
         name: s.name,
-        quantity: (s.quantity ?? 0).toString(),
+        quantity: s.quantity && s.quantity > 0 ? s.quantity.toString() : '',
         priceOverride: s.priceOverride?.toString() || '',
         costPriceOverride: s.costPriceOverride?.toString() || ''
       })),
@@ -120,7 +120,28 @@ export default function ProductsView() {
   };
 
   const handleAddProduct = async () => {
-    if (!productForm.name || !productForm.sku || !productForm.price || !productForm.categoryId || !productForm.branchId) return toast.error(t.products.fillRequired);
+    if (!productForm.name || !productForm.sku || !productForm.price || !productForm.categoryId || !productForm.branchId) {
+      return toast.error(t.products.fillRequired);
+    }
+
+    if (productForm.hasSizes) {
+      if (productForm.sizes.length === 0) {
+        return toast.error(t.products.addAtLeastOneSize || 'Please add at least one size or uncheck "Has Sizes".');
+      }
+
+      const trimmedSizes = productForm.sizes.map((s) => ({ ...s, name: s.name.trim() }));
+      const hasEmptyName = trimmedSizes.some((s) => !s.name);
+      if (hasEmptyName) {
+        return toast.error(t.products.emptySizeName || 'Please enter a name for all added sizes, or remove unused ones.');
+      }
+
+      const namesLower = trimmedSizes.map((s) => s.name.toLowerCase());
+      const hasDuplicates = new Set(namesLower).size !== namesLower.length;
+      if (hasDuplicates) {
+        return toast.error(t.products.duplicateSizeNames || 'Each size must have a unique name (e.g. S, M, L).');
+      }
+    }
+
     setIsSubmitting(true);
     
     const savePromise = (async () => {
@@ -249,6 +270,7 @@ export default function ProductsView() {
               <div><label className={labelClass}>{t.products.branch}</label><select className={selectClass} value={productForm.branchId} onChange={(e) => { setProductCategoryBranchId(e.target.value); setProductForm({ ...productForm, branchId: e.target.value, categoryId: '' }); }}><option value="">{t.products.selectBranch}</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
               <div><label className={labelClass}>{t.products.category}</label><select className={selectClass} value={productForm.categoryId} disabled={!productForm.branchId || isLoadingProductCategories} onChange={(e) => setProductForm({ ...productForm, categoryId: e.target.value })}><option value="">{!productForm.branchId ? t.products.selectBranchFirst : isLoadingProductCategories ? t.products.loading : t.products.selectCategory}</option>{productCategories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
               <div><label className={labelClass}>{t.products.sellingPrice}</label><input type="number" placeholder="0" className={inputClass} value={productForm.price} onChange={(e) => setProductForm({ ...productForm, price: e.target.value })} /></div>
+              <div><label className={labelClass}>{t.products.costPrice}</label><input type="number" placeholder="0" className={inputClass} value={productForm.costPrice} onChange={(e) => setProductForm({ ...productForm, costPrice: e.target.value })} /></div>
               {productForm.hasSizes ? (
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -270,7 +292,19 @@ export default function ProductsView() {
               ) : editProduct === null ? (
                 <div>
                   <label className={labelClass}>{t.products.openingStock}</label>
-                  <input type="number" min="0" placeholder="0" className={inputClass} value={productForm.stock} onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })} />
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    className={inputClass}
+                    value={productForm.stock}
+                    onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
+                    onFocus={(e) => {
+                      if (e.target.value === '0') {
+                        setProductForm(prev => ({ ...prev, stock: '' }));
+                      }
+                    }}
+                  />
                 </div>
               ) : null}
               <div className={isMobile ? '' : 'col-span-2'}><label className={labelClass}>{t.products.description}</label><textarea placeholder="..." className={`${inputClass} h-16 resize-y`} value={productForm.description} onChange={(e) => setProductForm({ ...productForm, description: e.target.value })} /></div>
@@ -290,7 +324,7 @@ export default function ProductsView() {
                     setProductForm(prev => ({
                       ...prev,
                       hasSizes: checked,
-                      sizes: checked && prev.sizes.length === 0 ? [{ name: '', quantity: '0', priceOverride: '', costPriceOverride: '' }] : prev.sizes
+                      sizes: checked && prev.sizes.length === 0 ? [{ name: '', quantity: '', priceOverride: '', costPriceOverride: '' }] : prev.sizes
                     }));
                   }}
                   className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
@@ -326,32 +360,47 @@ export default function ProductsView() {
                       Total Stock: {sizesTotalStock} units
                     </span>
                   </div>
-                  <Btn variant="ghost" size="sm" onClick={() => setProductForm({ ...productForm, sizes: [...productForm.sizes, { name: '', quantity: '0', priceOverride: '', costPriceOverride: '' }] })}>{t.products.addSize}</Btn>
+                  <Btn variant="ghost" size="sm" onClick={() => setProductForm({ ...productForm, sizes: [...productForm.sizes, { name: '', quantity: '', priceOverride: '', costPriceOverride: '' }] })}>{t.products.addSize}</Btn>
                 </div>
                 {productForm.sizes.length > 0 && (
                   <div className="flex flex-col gap-2">
-                    {productForm.sizes.map((size, idx) => (
-                      <div
-                        key={idx}
-                        className={`grid items-end gap-2 p-2 rounded-lg bg-white border border-gray-100 ${
-                          productForm.diffPricePerSize
-                            ? (isMobile ? 'grid-cols-1' : 'grid-cols-5')
-                            : (isMobile ? 'grid-cols-1' : 'grid-cols-3')
-                        }`}
-                      >
-                        <div>
-                          <label className="mb-1 block text-[10px] font-semibold text-foreground">{t.products.sizeName}</label>
-                          <input
-                            className={inputClass}
-                            value={size.name}
-                            onChange={(e) => {
-                              const n = [...productForm.sizes];
-                              n[idx] = { ...n[idx], name: e.target.value };
-                              setProductForm({ ...productForm, sizes: n });
-                            }}
-                            placeholder="e.g. S, M, L"
-                          />
-                        </div>
+                    {productForm.sizes.map((size, idx) => {
+                      const trimmedName = size.name.trim();
+                      const isDuplicate = !!trimmedName && productForm.sizes.some((other, oIdx) => oIdx !== idx && other.name.trim().toLowerCase() === trimmedName.toLowerCase());
+                      const isEmpty = !trimmedName && productForm.sizes.length > 1;
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`grid items-end gap-2 p-2 rounded-lg bg-white border ${
+                            isDuplicate ? 'border-red-300 ring-1 ring-red-200' : 'border-gray-100'
+                          } ${
+                            productForm.diffPricePerSize
+                              ? (isMobile ? 'grid-cols-1' : 'grid-cols-5')
+                              : (isMobile ? 'grid-cols-1' : 'grid-cols-3')
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="block text-[10px] font-semibold text-foreground">{t.products.sizeName}</label>
+                              {isDuplicate && (
+                                <span className="text-[9px] font-semibold text-red-500">Duplicate</span>
+                              )}
+                              {isEmpty && (
+                                <span className="text-[9px] font-semibold text-amber-500">Required</span>
+                              )}
+                            </div>
+                            <input
+                              className={`${inputClass} ${isDuplicate ? 'border-red-400 focus:border-red-500' : ''}`}
+                              value={size.name}
+                              onChange={(e) => {
+                                const n = [...productForm.sizes];
+                                n[idx] = { ...n[idx], name: e.target.value };
+                                setProductForm({ ...productForm, sizes: n });
+                              }}
+                              placeholder="e.g. S, M, L"
+                            />
+                          </div>
 
                         <div>
                           <label className="mb-1 block text-[10px] font-semibold text-foreground">{t.products.sizeQuantity || 'Quantity *'}</label>
@@ -364,6 +413,13 @@ export default function ProductsView() {
                               const n = [...productForm.sizes];
                               n[idx] = { ...n[idx], quantity: e.target.value };
                               setProductForm({ ...productForm, sizes: n });
+                            }}
+                            onFocus={(e) => {
+                              if (e.target.value === '0') {
+                                const n = [...productForm.sizes];
+                                n[idx] = { ...n[idx], quantity: '' };
+                                setProductForm({ ...productForm, sizes: n });
+                              }
                             }}
                             placeholder="0"
                           />
@@ -413,7 +469,7 @@ export default function ProductsView() {
                           </Btn>
                         </div>
                       </div>
-                    ))}
+                    ); })}
                   </div>
                 )}
               </div>
@@ -427,7 +483,14 @@ export default function ProductsView() {
             <div key={p.id} className="flex flex-wrap items-center gap-3 rounded-[10px] border border-border bg-white px-[14px] py-3" style={{ opacity: p.isActive ? 1 : 0.6 }}>
               <div className="h-10 w-10 shrink-0 overflow-hidden rounded text-lg" style={{ background: Theme.muted }}>{p.images?.[0] ? <img src={p.images[0]} alt={p.name} className="h-full w-full object-cover" /> : '📦'}</div>
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2"><span className="text-[13px] font-semibold" style={{ color: Theme.fg }}>{p.name}</span>{!p.isActive && <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[9px] font-bold text-gray-500 uppercase">{t.products.inactive}</span>}<span className="text-[11px]" style={{ color: Theme.mutedFg }}>· ৳{p.price}</span></div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[13px] font-semibold" style={{ color: Theme.fg }}>{p.name}</span>
+                  {!p.isActive && <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[9px] font-bold text-gray-500 uppercase">{t.products.inactive}</span>}
+                  <span className="text-[11px]" style={{ color: Theme.mutedFg }}>
+                    · Sell: ৳{p.price}
+                    {p.costPrice ? ` · Cost: ৳${p.costPrice}` : ''}
+                  </span>
+                </div>
                 <div className="text-[11px]" style={{ color: Theme.mutedFg }}>
                   {p.category?.name || t.uncategorized} · {t.sales.branch}: {branches.find((b: any) => b.id === p.inventories?.[0]?.warehouseId)?.name || 'Default'} · {t.modal.sku}: {p.sku} · {p.unitType === 'WEIGHT' ? `⚖️ ${p.unitLabel}` : `📦 ${p.unitLabel}`}
                   {p.sizes?.length > 0 && (
@@ -437,6 +500,9 @@ export default function ProductsView() {
                         <span key={s.id || s.name} className="inline-flex items-center gap-1 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-700 border border-gray-200">
                           <span>{s.name}:</span>
                           <span className="font-bold text-primary">{s.quantity ?? 0}</span>
+                          {s.priceOverride !== null && s.priceOverride !== undefined && (
+                            <span className="text-[9px] text-emerald-600 font-semibold">(৳{s.priceOverride})</span>
+                          )}
                         </span>
                       ))}
                       <span className="text-[10px] text-muted-foreground ml-1">
