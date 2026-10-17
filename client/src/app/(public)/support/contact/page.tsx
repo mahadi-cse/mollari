@@ -3,8 +3,8 @@ import { Metadata } from 'next';
 import { Mail, Phone, MapPin, MessageSquare, Send } from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: 'Contact Us | Mouchak Cosmetics',
-  description: 'Get in touch with Mouchak Cosmetics for any inquiries, support, or feedback.',
+  title: 'Contact Us | Mollari',
+  description: 'Get in touch with Mollari for any inquiries, support, or feedback.',
 };
 
 export default function ContactPage() {
@@ -41,7 +41,7 @@ export default function ContactPage() {
               </div>
               <h3 className="text-lg font-bold text-zinc-900">Email Us</h3>
               <p className="mt-2 text-zinc-600">We respond within 24 hours.</p>
-              <p className="mt-4 font-bold text-blue-600">support@mouchak.com</p>
+              <p className="mt-4 font-bold text-blue-600">support@mollari.com</p>
             </div>
 
             <div className="rounded-3xl bg-white p-8 shadow-sm border border-zinc-100 transition-all hover:shadow-md">

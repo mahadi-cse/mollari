@@ -712,7 +712,7 @@ export class AnalyticsService {
     staffMetrics.set(otherKey, {
       staffId: null,
       name: 'System / Online / Other',
-      email: 'system@mouchak.com',
+      email: 'system@mollari.com',
       role: 'System',
       ordersHandled: 0,
       manualSalesHandled: 0,

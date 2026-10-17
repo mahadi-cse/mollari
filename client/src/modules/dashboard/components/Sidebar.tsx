@@ -38,7 +38,7 @@ export function Sidebar({
   const settingsRef = useRef<HTMLDivElement>(null);
   const { t } = useDashboardLocale();
   const { data: settings } = useSiteSettings();
-  const storeName = settings?.storeName || 'Mouchak';
+  const storeName = settings?.storeName || 'Mollari';
 
   useEffect(() => {
     if (settingsOpen && settingsRef.current) {

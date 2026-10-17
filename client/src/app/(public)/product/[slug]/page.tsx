@@ -24,31 +24,31 @@ export async function generateMetadata({ params }: ProductDetailPageProps): Prom
     const product = await getCachedProduct(slug);
     if (!product) {
       return {
-        title: 'Product Not Found | Mouchak Cosmetics',
+        title: 'Product Not Found | Mollari',
       };
     }
     
     return {
-      title: `${product.name} | Mouchak Cosmetics`,
+      title: `${product.name} | Mollari`,
       description: product.description 
         ? product.description.slice(0, 160) 
-        : `Buy ${product.name} online at Mouchak Cosmetics. Premium quality skincare and beauty product.`,
+        : `Buy ${product.name} online at Mollari. Premium quality skincare and beauty product.`,
       openGraph: {
-        title: `${product.name} | Mouchak Cosmetics`,
-        description: product.description ? product.description.slice(0, 160) : `Buy ${product.name} online at Mouchak Cosmetics.`,
+        title: `${product.name} | Mollari`,
+        description: product.description ? product.description.slice(0, 160) : `Buy ${product.name} online at Mollari.`,
         images: product.images?.[0] ? [{ url: product.images[0] }] : [],
         type: 'website',
       },
       twitter: {
         card: 'summary_large_image',
-        title: `${product.name} | Mouchak Cosmetics`,
-        description: product.description ? product.description.slice(0, 160) : `Buy ${product.name} online at Mouchak Cosmetics.`,
+        title: `${product.name} | Mollari`,
+        description: product.description ? product.description.slice(0, 160) : `Buy ${product.name} online at Mollari.`,
         images: product.images?.[0] ? [product.images[0]] : [],
       },
     };
   } catch (error) {
     return {
-      title: 'Product | Mouchak Cosmetics',
+      title: 'Product | Mollari',
       description: 'Premium cosmetics and beauty products.',
     };
   }

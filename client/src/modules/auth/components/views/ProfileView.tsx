@@ -132,7 +132,7 @@ export default function ProfileView() {
               try {
                 const formData = new FormData();
                 formData.append('image', file);
-                const res = await apiClient.post('/uploads/image?folder=mouchak/users', formData, {
+                const res = await apiClient.post('/uploads/image?folder=mollari/users', formData, {
                   headers: { 'Content-Type': 'multipart/form-data' },
                 });
                 const newAvatarUrl = res.data.data.url;

@@ -69,7 +69,7 @@ export function Header() {
   }, [isMenuOpen]);
 
   const { t } = useHomepageLocale();
-  const storeName = settings?.storeName || "Mouchak Cosmetics";
+  const storeName = settings?.storeName || "Mollari";
   const [storeNameFirst, ...storeNameRest] = storeName.split(/\s+/).filter(Boolean);
   const storeNameRestText = storeNameRest.join(" ");
   const tagline = settings?.tagline || t.header.taglineFallback;
@@ -115,7 +115,7 @@ export function Header() {
             <MapPin size={12} /> {t.header.deliveryBanner}
           </span>
           <span className="flex items-center gap-2">
-            <Mail size={12} /> support@mouchak.com.bd
+            <Mail size={12} /> support@mollari.com
           </span>
           <span className="flex items-center gap-2">
             <Phone size={12} /> 01700-000000
@@ -138,8 +138,8 @@ export function Header() {
           {/* Brand Logo - Serif font */}
           <Link href="/" className="min-w-0 no-underline text-inherit hover:opacity-90 transition-opacity">
             <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight leading-tight">
-              {storeNameFirst || "Mouchak"}{" "}
-              <span className="text-primary italic">{storeNameRestText || "Cosmetics"}</span>
+              {storeNameFirst || "Mollari"}{" "}
+              <span className="text-primary italic">{storeNameRestText}</span>
             </h1>
             <p className="hidden sm:block text-[10px] tracking-widest text-zinc-500 uppercase">{tagline}</p>
           </Link>
@@ -419,7 +419,7 @@ export function Header() {
         {/* Drawer Header */}
         <div className="p-6 border-b border-zinc-100 flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold italic text-primary">Mouchak</h2>
+            <h2 className="text-xl font-bold italic text-primary">Mollari</h2>
             <div className="mt-1">
               <LanguageToggle />
             </div>
@@ -495,7 +495,7 @@ export function Header() {
           </div>
           <div className="flex items-center gap-3 text-zinc-500 text-sm">
             <Mail size={14} />
-            <span>support@mouchak.com.bd</span>
+            <span>support@mollari.com</span>
           </div>
         </div>
       </div>

@@ -72,7 +72,7 @@ export default function SalesView({
 
   const buildReceiptHtml = (sale: any, storeInfo?: { storeName: string; tagline: string; address: string; phone: string }) => {
     const store = {
-      storeName: storeInfo?.storeName || 'Mouchak Cosmetics',
+      storeName: storeInfo?.storeName || 'Mollari',
       tagline: storeInfo?.tagline || 'Premium Quality Cosmetics & Skincare',
       address: storeInfo?.address || '',
       phone: storeInfo?.phone || '',
@@ -293,7 +293,7 @@ export default function SalesView({
 
   const handlePrintReceipt = (sale: any) => {
     const storeInfo = {
-      storeName: siteSettings?.storeName || 'Mouchak Cosmetics',
+      storeName: siteSettings?.storeName || 'Mollari',
       tagline: siteSettings?.tagline || 'Premium Quality Cosmetics & Skincare',
       address: siteSettings?.contactAddress || '',
       phone: siteSettings?.contactPhone || '',

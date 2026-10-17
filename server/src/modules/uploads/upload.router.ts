@@ -34,11 +34,14 @@ router.post(
       return;
     }
 
-    const requestedFolder = (req.query.folder as string) || 'mouchak/products';
+    const requestedFolder = (req.query.folder as string) || 'mollari/products';
     
     // Whitelist allowed folders to prevent asset injection
-    const allowedFolders = ['mouchak/products', 'mouchak/categories', 'mouchak/users', 'mouchak/promotions'];
-    const folder = allowedFolders.includes(requestedFolder) ? requestedFolder : 'mouchak/products';
+    const allowedFolders = [
+      'mollari/products', 'mollari/categories', 'mollari/users', 'mollari/promotions',
+      'mouchak/products', 'mouchak/categories', 'mouchak/users', 'mouchak/promotions'
+    ];
+    const folder = allowedFolders.includes(requestedFolder) ? requestedFolder : 'mollari/products';
 
     // Upload buffer to Cloudinary via stream
     const result = await new Promise<any>((resolve, reject) => {

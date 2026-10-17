@@ -1,4 +1,4 @@
-# Mouchak Cosmetics - Client Application
+# Mollari - Client Application
 
 > A modern, scalable e-commerce frontend built with **Next.js 16**, **React 19**, and **TypeScript**. 
 

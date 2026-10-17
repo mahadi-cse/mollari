@@ -1,7 +1,7 @@
 import { prisma } from '../src/config/database';
 
 /**
- * Seed script for Mouchak Cosmetics database
+ * Seed script for Mollari database
  * Run after migrations: npx tsx prisma/seed.ts
  * 
  * This script initializes:

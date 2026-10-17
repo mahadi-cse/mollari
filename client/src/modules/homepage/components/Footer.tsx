@@ -125,7 +125,7 @@ export function Footer() {
               <span className="grid h-8 w-8 place-items-center rounded-lg bg-zinc-800/80">
                 <Mail size={14} className="text-primary" />
               </span>
-              {settings?.contactEmail || "hello@mouchakcosmetics.com"}
+              {settings?.contactEmail || "hello@mollari.com"}
             </p>
           </div>
         </motion.div>

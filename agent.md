@@ -1,4 +1,4 @@
-# Mouchak Cosmetics — Agent Reference (`agent.md`)
+# Mollari — Agent Reference (`agent.md`)
 
 > **Purpose**: Complete project knowledge base. Read this before making any changes to avoid redundant exploration.
 
@@ -6,7 +6,7 @@
 
 ## 1. Business Context
 
-**Mouchak Cosmetics** is a Bangladeshi cosmetics e-commerce & POS platform. It serves:
+**Mollari** is a Bangladeshi cosmetics e-commerce & POS platform. It serves:
 - **Customers**: Online storefront (product browsing, cart, checkout, order tracking, wishlisting).
 - **Staff/Admin**: Dashboard for inventory, POS manual sales, order processing, analytics, settings.
 
@@ -48,7 +48,7 @@
 ## 4. Full Directory Structure
 
 ```
-f:\My Projects\Mouchak Cosmetics\
+f:\My Projects\mollari\
 ├── agent.md                        ← This file
 ├── README.md
 ├── server.bat                      ← Windows script to start server
@@ -319,7 +319,7 @@ DATABASE_URL=postgresql://...         ← Supabase PostgreSQL
 ACCESS_TOKEN_SECRET=...
 ACCESS_TOKEN_EXPIRES_HOURS=3
 REFRESH_TOKEN_EXPIRES_DAYS=7
-REFRESH_TOKEN_COOKIE_NAME=mouchak_refresh_token
+REFRESH_TOKEN_COOKIE_NAME=mollari_refresh_token
 GOOGLE_CLIENT_ID=...
 SSLCOMMERZ_STORE_ID=...
 SSLCOMMERZ_STORE_PASSWD=...
@@ -523,7 +523,7 @@ cd server && npm run db:migrate
 # Push schema without migration
 cd server && npm run db:push
 
-# Seed admin user  (email: admin@mouchak.local  pw: Admin@mahadi@cse)
+# Seed admin user  (email: admin@mollari.local  pw: Admin@mahadi@cse)
 cd server && npm run db:seed:auth-admin
 
 # Seed RBAC roles
@@ -573,9 +573,9 @@ The dashboard is section-routed via `/dashboard/[section]`. Known sections:
 ## 12. Known Issues / Gotchas
 
 1. **Double `/api` prefix**: The most common bug. `apiClient.baseURL` already includes `/api`. Never prefix client-side paths with `/api`.
-2. **Refresh token stored as cookie**: `mouchak_refresh_token` cookie (httpOnly). Access token passed as `Authorization: Bearer` header.
+2. **Refresh token stored as cookie**: `mollari_refresh_token` cookie (httpOnly). Access token passed as `Authorization: Bearer` header.
 3. **AuditLog `orderId` FK**: The `audit_logs.order_id` column is a FK to `orders`. For non-order audit logs, always pass `orderId: null`.
 4. **Cache invalidation**: Homepage routes use Redis/memory cache. After any settings mutation, call `cacheDel(HP_KEYS.xyz)` to invalidate.
-5. **Admin credentials (local dev)**: `admin@mouchak.local` / `Admin@mahadi@cse` (SYSTEM_ADMIN role).
+5. **Admin credentials (local dev)**: `admin@mollari.local` / `Admin@mahadi@cse` (SYSTEM_ADMIN role).
 6. **Supabase connection**: Uses direct (port 5432) not PgBouncer pooler for Prisma compatibility.
 7. **Cloudinary uploads**: All images use Cloudinary. Upload endpoint: `POST /api/uploads`.

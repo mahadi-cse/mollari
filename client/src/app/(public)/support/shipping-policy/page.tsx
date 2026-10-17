@@ -3,8 +3,8 @@ import { Metadata } from 'next';
 import { Truck, Clock, ShieldCheck, Globe } from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: 'Shipping Policy | Mouchak Cosmetics',
-  description: 'Learn about Mouchak Cosmetics shipping methods, delivery times, and rates across Bangladesh.',
+  title: 'Shipping Policy | Mollari',
+  description: 'Learn about Mollari shipping methods, delivery times, and rates across Bangladesh.',
 };
 
 export default function ShippingPolicyPage() {
@@ -77,7 +77,7 @@ export default function ShippingPolicyPage() {
                 Shipping Security
               </h2>
               <p className="mt-4 leading-relaxed">
-                All packages are sealed with Mouchak Cosmetics security tape. If you notice any tampering or if the seal is broken, please do not accept the delivery and contact our support team immediately at <strong>+880 1XXX-XXXXXX</strong>.
+                All packages are sealed with Mollari security tape. If you notice any tampering or if the seal is broken, please do not accept the delivery and contact our support team immediately at <strong>+880 1XXX-XXXXXX</strong>.
               </p>
             </div>
 
@@ -85,7 +85,7 @@ export default function ShippingPolicyPage() {
               <h2 className="text-2xl font-bold text-zinc-900">International Shipping</h2>
               <p className="mt-4 leading-relaxed flex items-start gap-3">
                 <Globe className="mt-1 shrink-0 text-zinc-400" size={20} />
-                Currently, we only ship within Bangladesh. We are working on bringing Mouchak Cosmetics to our international fans soon!
+                Currently, we only ship within Bangladesh. We are working on bringing Mollari to our international fans soon!
               </p>
             </div>
           </section>

@@ -152,7 +152,7 @@ export default function ProfileTab() {
                   const formData = new FormData();
                   formData.append('image', file);
                   const { apiClient } = await import('@/shared/lib/apiClient');
-                  const res = await apiClient.post('/uploads/image?folder=mouchak/users', formData, {
+                  const res = await apiClient.post('/uploads/image?folder=mollari/users', formData, {
                     headers: { 'Content-Type': 'multipart/form-data' },
                   });
                   change('avatarUrl', res.data.data.url);

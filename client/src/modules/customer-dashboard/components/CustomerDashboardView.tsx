@@ -47,7 +47,7 @@ function Sidebar({
   onClose?: () => void;
 }) {
   const { data: settings } = useSiteSettings();
-  const storeName = settings?.storeName || 'Mouchak';
+  const storeName = settings?.storeName || 'Mollari';
 
   return (
     <>
@@ -108,7 +108,7 @@ export default function CustomerDashboardView() {
   const router       = useRouter();
   const { data: session } = useSession();
   const { data: settings } = useSiteSettings();
-  const storeName = settings?.storeName || 'Mouchak';
+  const storeName = settings?.storeName || 'Mollari';
 
   const profileQuery = useCustomerDashboardProfile();
   const summaryQuery = useCustomerDashboardSummary();

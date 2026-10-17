@@ -2,8 +2,8 @@ import React from 'react';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'FAQ | Mouchak Cosmetics',
-  description: 'Frequently asked questions about Mouchak Cosmetics products, orders, and shipping.',
+  title: 'FAQ | Mollari',
+  description: 'Frequently asked questions about Mollari products, orders, and shipping.',
 };
 
 const faqs = [
@@ -29,7 +29,7 @@ const faqs = [
     questions: [
       {
         q: 'Are your products cruelty-free?',
-        a: 'Yes, all Mouchak Cosmetics products are 100% cruelty-free and never tested on animals.',
+        a: 'Yes, all Mollari products are 100% cruelty-free and never tested on animals.',
       },
       {
         q: 'Where are your products manufactured?',
@@ -57,7 +57,7 @@ export default function FAQPage() {
             Frequently Asked <span className="text-pink-600">Questions</span>
           </h1>
           <p className="mt-4 text-lg text-zinc-600">
-            Everything you need to know about Mouchak Cosmetics.
+            Everything you need to know about Mollari.
           </p>
         </div>
 

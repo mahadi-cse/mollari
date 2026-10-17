@@ -136,7 +136,7 @@ async function assignRoleToUser(
   if (!role) throw new Error(`Role "${roleName}" not found`);
 
   try {
-    const userRole = await prisma.userRole_Model.create({
+    const userRole = await (prisma as any).userRole.create({
       data: {
         userId,
         roleId: role.id,
@@ -471,7 +471,7 @@ async function displayStats() {
   const perms = await prisma.permission.count();
   const rolePerms = await prisma.rolePermission.count();
   const branches = await prisma.branch.count();
-  const userRoles = await prisma.userRole_Model.count();
+  const userRoles = await (prisma as any).userRole.count();
 
   console.log(`Roles:              ${roles}`);
   console.log(`Permissions:        ${perms}`);
@@ -488,7 +488,7 @@ async function main() {
   console.log('\n');
   console.log('╔════════════════════════════════════════╗');
   console.log('║   RBAC System Seed Script (v1.0)       ║');
-  console.log('║   Mouchak Cosmetics Dashboard          ║');
+  console.log('║   Mollari Dashboard                    ║');
   console.log('╚════════════════════════════════════════╝');
 
   try {

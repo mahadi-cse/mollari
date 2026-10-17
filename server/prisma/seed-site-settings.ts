@@ -14,7 +14,7 @@ async function seedSiteSettings() {
       await prisma.siteSettings.update({
         where: { id: 1 },
         data: {
-          storeName: 'Mouchak Cosmetics',
+          storeName: 'Mollari',
           tagline: 'Clean · Cruelty-Free · Bangladesh',
           heroHeadline: 'Spring Beauty Collection',
           heroYear: '2026',
@@ -25,7 +25,7 @@ async function seedSiteSettings() {
       console.log('✓ Creating site settings...');
       await prisma.siteSettings.create({
         data: {
-          storeName: 'Mouchak Cosmetics',
+          storeName: 'Mollari',
           tagline: 'Clean · Cruelty-Free · Bangladesh',
           heroHeadline: 'Spring Beauty Collection',
           heroYear: '2026',

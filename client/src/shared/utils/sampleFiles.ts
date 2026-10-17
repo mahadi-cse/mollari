@@ -35,7 +35,7 @@ export function downloadCategorySample() {
 
   const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  saveAs(blob, 'mouchak_category_sample.xlsx');
+  saveAs(blob, 'mollari_category_sample.xlsx');
 }
 
 /** Generate and download a sample product Excel file */
@@ -81,5 +81,5 @@ export function downloadProductSample() {
 
   const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  saveAs(blob, 'mouchak_product_sample.xlsx');
+  saveAs(blob, 'mollari_product_sample.xlsx');
 }

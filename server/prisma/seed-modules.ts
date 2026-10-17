@@ -36,7 +36,7 @@ async function main() {
   }
   console.log("Seeded modules.");
   
-  const admin = await prisma.user.findUnique({ where: { email: 'admin@mouchak.local' } });
+  const admin = await prisma.user.findUnique({ where: { email: 'admin@mollari.local' } });
   if (admin) {
     const modules = await prisma.appModule.findMany();
     for (const m of modules) {

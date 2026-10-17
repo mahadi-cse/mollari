@@ -165,7 +165,7 @@ export default function AnalyticsView() {
 
   // ── Export definitions ──
   const periodLabel = isCustom ? `${customStart}_to_${customEnd}` : period;
-  const baseFilename = `mouchak_analytics_${periodLabel}`;
+  const baseFilename = `mollari_analytics_${periodLabel}`;
 
   const topProductsColumns: ExportColumn[] = [
     { header: 'Rank', accessor: (_row: any, i?: number) => (i ?? 0) + 1 },
@@ -214,7 +214,7 @@ export default function AnalyticsView() {
     
     const fullOpts = {
       filename: baseFilename,
-      title: 'Mouchak Cosmetics - Analytics Report',
+      title: 'Mollari - Analytics Report',
       subtitle,
       summary: {
         title: 'Summary Overview',

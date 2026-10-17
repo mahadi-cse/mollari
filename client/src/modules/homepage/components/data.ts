@@ -203,7 +203,7 @@ export const featuredProductsContent = {
 export const newsletterContent = {
   icon: Gift,
   label: "Exclusive Member Offers",
-  title: "Join Mouchak Cosmetics Club",
+  title: "Join Mollari Club",
   description: "Get 10% off your first order and early access to launches",
   inputPlaceholder: "Enter your email address",
   submitButton: "Subscribe",
@@ -215,7 +215,7 @@ export const newsletterContent = {
 // ============================================================================
 
 export const footerContent = {
-  brandName: "Mouchak Cosmetics",
+  brandName: "Mollari",
   brandRegion: "Bangladesh",
   brandDescription:
     "Celebrating natural beauty with luxurious cruelty-free cosmetics, proudly serving customers across Bangladesh.",
@@ -228,9 +228,9 @@ export const footerContent = {
   contact: {
     address: "Dhaka, Bangladesh",
     phone: "+880 1XXX-XXXXXX",
-    email: "hello@mouchakcosmetics.com",
+    email: "hello@mollari.com",
   },
-  copyright: "© 2026 Mouchak Cosmetics. All rights reserved.",
+  copyright: "© 2026 Mollari. All rights reserved.",
   paymentLabel: "We Accept:",
 };
 
@@ -250,7 +250,7 @@ export const paymentMethods = ["bKash", "Nagad", "Visa", "MC"];
 // ============================================================================
 
 export const siteConfig = {
-  siteName: "Mouchak Cosmetics",
+  siteName: "Mollari",
   tagline: "Beauty",
   searchPlaceholder: "Search for products, brands and more...",
 };

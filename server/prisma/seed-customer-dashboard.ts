@@ -4,7 +4,7 @@ import { PrismaClient, CustomerSegment, OrderStatus, PaymentMethod, PaymentStatu
 
 const prisma = new PrismaClient();
 
-const DEFAULT_CUSTOMER_EMAIL = process.env.SEED_CUSTOMER_EMAIL || 'customer@mouchak.local';
+const DEFAULT_CUSTOMER_EMAIL = process.env.SEED_CUSTOMER_EMAIL || 'customer@mollari.local';
 const DEFAULT_CUSTOMER_PASSWORD = process.env.SEED_CUSTOMER_PASSWORD || 'Customer@12345';
 const CUSTOMER_ROLE_CODE = '9x909';
 

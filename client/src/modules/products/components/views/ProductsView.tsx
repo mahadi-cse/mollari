@@ -308,7 +308,7 @@ export default function ProductsView() {
                 </div>
               ) : null}
               <div className={isMobile ? '' : 'col-span-2'}><label className={labelClass}>{t.products.description}</label><textarea placeholder="..." className={`${inputClass} h-16 resize-y`} value={productForm.description} onChange={(e) => setProductForm({ ...productForm, description: e.target.value })} /></div>
-              <div><label className={labelClass}>{t.products.productImage}</label><ImageUploader ref={productImageRef} value={productForm.image} onChange={(url) => setProductForm({ ...productForm, image: url })} folder="mouchak/products" aspect={1} /></div>
+              <div><label className={labelClass}>{t.products.productImage}</label><ImageUploader ref={productImageRef} value={productForm.image} onChange={(url) => setProductForm({ ...productForm, image: url })} folder="mollari/products" aspect={1} /></div>
             </div>
             <div className={`mt-3 grid gap-[14px] ${isMobile ? 'grid-cols-1' : 'grid-cols-3'}`}>
               <div><label className={labelClass}>{t.products.unitType}</label><select className={selectClass} value={productForm.unitType} onChange={(e) => { const ut = e.target.value as 'PIECE' | 'WEIGHT'; setProductForm({ ...productForm, unitType: ut, unitLabel: ut === 'PIECE' ? 'pc' : 'kg' }); }}><option value="PIECE">{t.products.piece}</option><option value="WEIGHT">{t.products.weight}</option></select></div>

@@ -1137,7 +1137,7 @@ model SiteSettings {
   id                    Int       @id @default(autoincrement())
   
   // Store branding
-  storeName             String    @default("Mouchak Cosmetics")
+  storeName             String    @default("Mollari")
   tagline               String    @default("Clean · Cruelty-Free · Bangladesh")
   primaryColor          String    @default("#f01172")
   
@@ -1149,7 +1149,7 @@ model SiteSettings {
   // Contact Info
   contactAddress        String    @default("Dhaka, Bangladesh")
   contactPhone          String    @default("+880 1XXX-XXXXXX")
-  contactEmail          String    @default("hello@mouchakcosmetics.com")
+  contactEmail          String    @default("hello@mollari.com")
   
   // Metadata
   lastUpdated           DateTime  @default(now()) @updatedAt

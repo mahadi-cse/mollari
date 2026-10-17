@@ -1,7 +1,7 @@
 {
-  "name": "mouchak-cosmetics-backend",
+  "name": "mollari-backend",
   "version": "1.0.0",
-  "description": "Backend for Mouchak Cosmetics e-commerce platform",
+  "description": "Backend for Mollari e-commerce platform",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",

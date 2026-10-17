@@ -50,7 +50,7 @@ const ImageUploader = forwardRef<ImageUploaderRef, ImageUploaderProps>(function 
   {
     value,
     onChange,
-    folder = 'mouchak/products',
+    folder = 'mollari/products',
     aspect = 1,
     maxSizeMB = 0.2,
     placeholder = 'Click or drag to upload image',

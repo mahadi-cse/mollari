@@ -105,10 +105,10 @@ export default function RegisterView({ callbackUrl = '/dashboard' }: RegisterVie
           <div className="absolute bottom-10 left-5 w-32 h-32 bg-zinc-100/30 rounded-full blur-2xl" />
 
           <div className="relative z-10">
-            <p className="text-xs uppercase tracking-[0.4em] text-zinc-500">Mouchak Cosmetics</p>
+            <p className="text-xs uppercase tracking-[0.4em] text-zinc-500">Mollari</p>
             <h1 className="mt-4 text-4xl font-semibold leading-tight text-zinc-900">
               Join
-              <span className="block text-zinc-700">Mouchak</span>
+              <span className="block text-zinc-700">Mollari</span>
             </h1>
             <p className="mt-4 max-w-sm text-sm text-zinc-600">
               Create your free account and start shopping the best in beauty, skincare &amp; haircare.

@@ -246,7 +246,7 @@ router.get("/settings", async (req, res) => {
     const settings = await prisma.siteSettings.findFirst();
 
     const result = settings ?? {
-      storeName: "Mouchak Cosmetics",
+      storeName: "Mollari",
       tagline: "Clean · Cruelty-Free · Bangladesh",
       primaryColor: "#f01172",
       heroHeadline: "Spring Beauty Collection",
@@ -254,7 +254,7 @@ router.get("/settings", async (req, res) => {
       heroDescription: "Discover luxurious skincare and makeup that celebrates your natural glow. Clean, cruelty-free formulas delivered across Bangladesh in 48 hours.",
       contactAddress: "Dhaka, Bangladesh",
       contactPhone: "+880 1XXX-XXXXXX",
-      contactEmail: "hello@mouchakcosmetics.com",
+      contactEmail: "hello@mollari.com",
     };
 
     await cacheSet(HP_KEYS.settings, result, TTL.MEDIUM);
@@ -293,7 +293,7 @@ router.put("/settings", authenticate, authorize(USER_TYPE_CODES.SYSTEM_ADMIN, US
       },
       create: {
         id: 1,
-        storeName: storeName || "Mouchak Cosmetics",
+        storeName: storeName || "Mollari",
         tagline: tagline || "Clean · Cruelty-Free · Bangladesh",
         primaryColor: primaryColor || "#f01172",
         heroHeadline: heroHeadline || "Spring Beauty Collection",
@@ -301,7 +301,7 @@ router.put("/settings", authenticate, authorize(USER_TYPE_CODES.SYSTEM_ADMIN, US
         heroDescription: heroDescription || "Discover luxurious skincare and makeup that celebrates your natural glow. Clean, cruelty-free formulas delivered across Bangladesh in 48 hours.",
         contactAddress: contactAddress || "Dhaka, Bangladesh",
         contactPhone: contactPhone || "+880 1XXX-XXXXXX",
-        contactEmail: contactEmail || "hello@mouchakcosmetics.com",
+        contactEmail: contactEmail || "hello@mollari.com",
       },
     });
 

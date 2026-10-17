@@ -130,7 +130,7 @@ export default function GeneralSettingsTab({
               value={settings.contactEmail}
               onChange={(e) => setSettings({ ...settings, contactEmail: e.target.value })}
               className={inputClass}
-              placeholder="e.g. hello@mouchak.com"
+              placeholder="e.g. hello@mollari.com"
             />
           </div>
         </div>

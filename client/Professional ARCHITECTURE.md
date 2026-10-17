@@ -1,4 +1,4 @@
-# Mouchak Cosmetics — Client Architecture Guide
+# Mollari — Client Architecture Guide
 
 > **Next.js 16 · React 19 · TypeScript · TanStack Query · Tailwind CSS 4**
 

@@ -83,7 +83,7 @@ export const en = {
   // Newsletter
   newsletter: {
     label: "Exclusive Member Offers",
-    title: "Join Mouchak Cosmetics Club",
+    title: "Join Mollari Club",
     description: "Get 10% off your first order and early access to launches",
     inputPlaceholder: "Enter your email address",
     submitButton: "Subscribe",
@@ -105,7 +105,7 @@ export const en = {
       address: "Dhaka, Bangladesh",
     },
     productCategories: ["Skincare", "Makeup", "Haircare", "Perfume"],
-    copyright: "© 2026 Mouchak Cosmetics. All rights reserved.",
+    copyright: "© 2026 Mollari. All rights reserved.",
     paymentLabel: "We Accept:",
     supportLinks: [
       "My Account",

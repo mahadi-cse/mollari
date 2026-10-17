@@ -29,7 +29,7 @@ const initializeLogger = (): winston.Logger => {
       winston.format.errors({ stack: true }),
       winston.format.json()
     ),
-    defaultMeta: { service: 'mouchak-api' },
+    defaultMeta: { service: 'mollari-api' },
     transports: [
       new winston.transports.File({
         filename: 'logs/error.log',

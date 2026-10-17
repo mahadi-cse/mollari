@@ -16,12 +16,12 @@ export async function generateMetadata(): Promise<Metadata> {
   try {
     const settings = await homepageAPI.getSettings();
     return {
-      title: settings?.storeName || "Mouchak Cosmetics",
+      title: settings?.storeName || "Mollari",
       description: settings?.tagline || "Premium cosmetics for everyone",
     };
   } catch (error) {
     return {
-      title: "Mouchak Cosmetics",
+      title: "Mollari",
       description: "Premium cosmetics for everyone",
     };
   }

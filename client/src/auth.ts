@@ -41,7 +41,7 @@ const getBackendApiBaseUrl = (): string => {
 };
 
 const getRefreshCookieName = (): string => {
-  return process.env.AUTH_REFRESH_COOKIE_NAME || 'mouchak_refresh_token';
+  return process.env.AUTH_REFRESH_COOKIE_NAME || 'mollari_refresh_token';
 };
 
 const getAuthSecret = (): string | undefined => {

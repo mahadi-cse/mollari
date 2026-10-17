@@ -153,11 +153,11 @@ interface SettingsState {
   heroDescription: string;
 }
 
-const DASHBOARD_SETTINGS_KEY = 'mouchak.dashboard.settings.v1';
-const DASHBOARD_STAFF_KEY = 'mouchak.dashboard.staff.v1';
+const DASHBOARD_SETTINGS_KEY = 'mollari.dashboard.settings.v1';
+const DASHBOARD_STAFF_KEY = 'mollari.dashboard.staff.v1';
 
 const DEFAULT_SETTINGS: SettingsState = {
-  storeName: 'Mouchak Cosmetics',
+  storeName: 'Mollari',
   primaryColor: '#f01172',
   currency: 'BDT',
   taxRate: 15,
@@ -165,7 +165,7 @@ const DEFAULT_SETTINGS: SettingsState = {
   lowStockThreshold: 15,
   autoReserve: true,
   barcodeEnabled: true,
-  sslStoreId: 'mouchak_store_01',
+  sslStoreId: 'mollari_store_01',
   sslStoreSecret: '',
   refundDays: 7,
   defaultShipping: 80,
@@ -180,7 +180,7 @@ const DEFAULT_SETTINGS: SettingsState = {
   acceptedPayments: { bkash: true, nagad: true, card: true, cash: true },
   contactAddress: 'Dhaka, Bangladesh',
   contactPhone: '+880 1XXX-XXXXXX',
-  contactEmail: 'hello@mouchakcosmetics.com',
+  contactEmail: 'hello@mollari.com',
   heroHeadline: 'Spring Beauty',
   heroYear: '2026',
   heroDescription: 'Discover luxurious skincare and makeup that celebrates your natural glow.',
@@ -190,7 +190,7 @@ const STAFF_LIST: StaffMember[] = [
   {
     id: 1,
     name: 'Karim Hossain',
-    email: 'karim@mouchak.com',
+    email: 'karim@mollari.com',
     role: 'Admin',
     branch: 'Dhaka Main',
     status: 'active',
@@ -198,7 +198,7 @@ const STAFF_LIST: StaffMember[] = [
   {
     id: 2,
     name: 'Fatima Khanam',
-    email: 'fatima@mouchak.com',
+    email: 'fatima@mollari.com',
     role: 'Staff',
     branch: 'Chittagong',
     status: 'active',
@@ -206,7 +206,7 @@ const STAFF_LIST: StaffMember[] = [
   {
     id: 3,
     name: 'Raihan Ahmed',
-    email: 'raihan@mouchak.com',
+    email: 'raihan@mollari.com',
     role: 'Staff',
     branch: 'Sylhet Outlet',
     status: 'inactive',
