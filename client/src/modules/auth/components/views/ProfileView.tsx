@@ -180,6 +180,7 @@ export default function ProfileView() {
                 };
                 await apiClient.patch('/auth/profile', payload);
                 setProfile((prev: any) => ({ ...prev, ...payload }));
+                queryClient.invalidateQueries({ queryKey: PROFILE_QUERY_KEY });
               } catch (error) {
                 console.error('Failed to update profile', error);
                 alert('Failed to save profile changes.');

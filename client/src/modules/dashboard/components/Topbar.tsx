@@ -37,6 +37,15 @@ export function Topbar({
     }
   }, [profileOpen]);
 
+  const userInitials = profileUser?.name
+    ? profileUser.name
+        .split(' ')
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((w: string) => w.charAt(0).toUpperCase())
+        .join('')
+    : 'U';
+
   return (
     <header
       className={`sticky top-0 z-10 flex shrink-0 items-center justify-between ${isMobile ? 'h-[52px] px-4' : 'h-[58px] px-8'}`}
@@ -108,12 +117,19 @@ export function Topbar({
             title="User Profile"
           >
             <div
-              className="flex h-8 w-8 items-center justify-center rounded-full text-[13px] font-extrabold overflow-hidden"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-[12px] font-extrabold overflow-hidden"
               style={{ background: Theme.primary, color: 'white' }}
             >
-              {profileUser?.avatarUrl
-                ? <img src={profileUser.avatarUrl} alt={profileUser.name} className="h-full w-full object-cover" />
-                : profileUser?.name?.charAt(0)?.toUpperCase() || 'U'}
+              {profileUser?.avatarUrl ? (
+                <img
+                  src={profileUser.avatarUrl}
+                  alt={profileUser.name || 'User'}
+                  className="h-full w-full object-cover"
+                  onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
+                />
+              ) : (
+                userInitials
+              )}
             </div>
             {!isMobile && (
               <span className="text-[13px] font-bold pr-1.5" style={{ color: Theme.fg }}>
@@ -135,30 +151,53 @@ export function Topbar({
               >
                 {/* User Header */}
                 <div
-                  className="px-6 py-6 border-b text-center"
+                  className="px-6 py-5 border-b text-center"
                   style={{
                     borderColor: Theme.border,
-                    background: `linear-gradient(180deg, ${Theme.secondary}20 0%, transparent 100%)`,
+                    background: `linear-gradient(180deg, ${Theme.secondary}25 0%, transparent 100%)`,
                   }}
                 >
-                  <div className="flex flex-col items-center gap-3">
+                  <div className="flex flex-col items-center gap-2.5">
                     <div
-                      className="flex h-20 w-20 items-center justify-center rounded-full text-[28px] font-black text-white shadow-lg overflow-hidden"
+                      className="flex h-18 w-18 items-center justify-center rounded-full text-[24px] font-black text-white shadow-md overflow-hidden cursor-pointer transition hover:opacity-90"
+                      onClick={() => { navigate('profile'); setProfileOpen(false); }}
                       style={{
                         background: `linear-gradient(135deg, ${Theme.primary} 0%, ${Theme.primary}dd 100%)`,
-                        border: `4px solid ${Theme.card}`,
+                        border: `3px solid ${Theme.card}`,
                       }}
+                      title="View account"
                     >
-                      {profileUser?.avatarUrl
-                        ? <img src={profileUser.avatarUrl} alt={profileUser.name} className="h-full w-full object-cover" />
-                        : profileUser?.name?.charAt(0)?.toUpperCase() || 'U'}
+                      {profileUser?.avatarUrl ? (
+                        <img
+                          src={profileUser.avatarUrl}
+                          alt={profileUser.name || 'User'}
+                          className="h-full w-full object-cover"
+                          onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
+                        />
+                      ) : (
+                        <span>{userInitials}</span>
+                      )}
                     </div>
-                    <div className="space-y-1">
-                      <div className="text-[16px] font-bold tracking-tight" style={{ color: Theme.fg }}>
+                    <div className="space-y-0.5">
+                      <div className="text-[15px] font-bold tracking-tight" style={{ color: Theme.fg }}>
                         {profileUser?.name || t.profile.user}
                       </div>
-                      <div className="text-[11px] font-medium uppercase tracking-widest opacity-60" style={{ color: Theme.mutedFg }}>
-                        {profileUser?.role || t.profile.administrator}
+                      {profileUser?.email && (
+                        <div className="text-[11px] font-normal truncate max-w-[210px]" style={{ color: Theme.mutedFg }}>
+                          {profileUser.email}
+                        </div>
+                      )}
+                      <div className="pt-1">
+                        <span
+                          className="inline-block text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border"
+                          style={{
+                            background: Theme.primary + '15',
+                            color: Theme.primary,
+                            borderColor: Theme.primary + '30',
+                          }}
+                        >
+                          {profileUser?.role || t.profile.administrator}
+                        </span>
                       </div>
                     </div>
                   </div>
