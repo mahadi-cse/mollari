@@ -177,6 +177,16 @@ export class ManualSaleService {
         });
       }
 
+      // Decrement size quantity for items sold with a specific size
+      for (const item of lineItems) {
+        if (item.sizeName) {
+          await tx.productSize.updateMany({
+            where: { productId: item.productId, name: item.sizeName },
+            data: { quantity: { decrement: item.quantity } },
+          });
+        }
+      }
+
       return {
         id: sale.id,
         saleNumber: sale.saleNumber,

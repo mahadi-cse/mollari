@@ -36,6 +36,8 @@ export default function InventoryView({
   const [mfgDate, setMfgDate] = useState('');
   const [expDate, setExpDate] = useState('');
   const [formSizeName, setFormSizeName] = useState('');
+  const [sizeStocks, setSizeStocks] = useState<Record<string, string>>({});
+  const [sizeAdjustmentMode, setSizeAdjustmentMode] = useState<'all' | 'single'>('all');
   const [productQuery, setProductQuery] = useState('');
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -68,6 +70,7 @@ export default function InventoryView({
       name: item.product?.name || t.unknownProduct,
       sku: item.product?.sku || t.na,
       stock: item.availableQty ?? item.quantity ?? 0,
+      sizes: item.product?.sizes || [],
       branchId: resolveBranchId(item),
       warehouse: item.warehouse || t.na,
       status: 'active',
@@ -84,6 +87,7 @@ export default function InventoryView({
     name: item.product?.name || t.unknownProduct,
     sku: item.product?.sku || t.na,
     stock: item.availableQty ?? item.quantity ?? 0,
+    sizes: item.product?.sizes || [],
     branchId: resolveBranchId(item),
     warehouse: item.warehouse || t.na,
     status: 'active',
@@ -155,6 +159,13 @@ export default function InventoryView({
     };
   }, [branchProducts]);
 
+  const totalSizeStocksSum = useMemo(() => {
+    return Object.values(sizeStocks).reduce((sum, val) => {
+      const q = parseInt(val, 10);
+      return sum + (isNaN(q) ? 0 : Math.max(0, q));
+    }, 0);
+  }, [sizeStocks]);
+
   const selectedProduct = modalProducts.find((p: any) => p.id === parseInt(formProductId));
 
   const handleFormSubmit = async () => {
@@ -168,14 +179,53 @@ export default function InventoryView({
     }
 
     const productId = parseInt(formProductId);
-    const enteredValue = parseInt(formStockValue);
+    const meta = getProductMeta(productId);
+    const productSizes = (meta as any)?.sizes || [];
+    const hasSizes = productSizes.length > 0;
 
+    // 1. All Sizes Mode
+    if (hasSizes && sizeAdjustmentMode === 'all') {
+      const formattedSizes = productSizes.map((s: any) => ({
+        name: s.name,
+        quantity: Math.max(0, parseInt(sizeStocks[s.name] ?? (s.quantity ?? 0).toString(), 10) || 0),
+      }));
+      const newTotalStock = formattedSizes.reduce((sum: number, s: any) => sum + s.quantity, 0);
+      const currentStock = selectedProduct?.stock || 0;
+      const quantityChange = newTotalStock - currentStock;
+
+      try {
+        await adjustStockMutation.mutateAsync({
+          productId,
+          quantity: quantityChange,
+          type: 'ADJUSTMENT',
+          warehouseId: Number(formBranchId),
+          notes: `Batch size stock update from inventory [Total: ${newTotalStock}]`,
+          sizes: formattedSizes,
+        });
+        toast.success(t.inventory.stockUpdated);
+        setModalOpen(false);
+      } catch {
+        toast.error(t.inventory.failedUpdate);
+      }
+      return;
+    }
+
+    // 2. Single Size or Regular Product
+    const enteredValue = parseInt(formStockValue);
     if (isNaN(enteredValue) || enteredValue < 0 || !selectedProduct) {
       return;
     }
 
-    const currentStock = selectedProduct.stock || 0;
-    const quantityChange = formMode === 'set' ? enteredValue - currentStock : enteredValue;
+    let quantityChange = 0;
+    if (hasSizes && formSizeName) {
+      const targetSize = productSizes.find((s: any) => s.name === formSizeName);
+      const currentSizeStock = targetSize?.quantity ?? 0;
+      quantityChange = formMode === 'set' ? enteredValue - currentSizeStock : enteredValue;
+    } else {
+      const currentStock = selectedProduct.stock || 0;
+      quantityChange = formMode === 'set' ? enteredValue - currentStock : enteredValue;
+    }
+
     if (quantityChange === 0) {
       setModalOpen(false);
       setFormStockValue('');
@@ -188,7 +238,9 @@ export default function InventoryView({
         quantity: quantityChange,
         type: 'ADJUSTMENT',
         warehouseId: Number(formBranchId),
-        notes: formMode === 'set' ? 'Manual set stock from inventory dashboard' : 'Manual add stock from inventory dashboard',
+        notes: formMode === 'set' 
+          ? `Manual set stock from inventory dashboard${formSizeName ? ` [Size: ${formSizeName}]` : ''}` 
+          : `Manual add stock from inventory dashboard${formSizeName ? ` [Size: ${formSizeName}]` : ''}`,
         ...(formSizeName ? { sizeName: formSizeName } : {}),
         ...(formMode === 'add' && quantityChange > 0
           ? {
@@ -221,6 +273,8 @@ export default function InventoryView({
     setMfgDate('');
     setExpDate('');
     setFormSizeName('');
+    setSizeStocks({});
+    setSizeAdjustmentMode('all');
     setModalOpen(true);
   };
 
@@ -240,8 +294,31 @@ export default function InventoryView({
     if (!exists) {
       setFormProductId('');
       setProductQuery('');
+      setSizeStocks({});
+      setFormSizeName('');
     }
   }, [formBranchId, formProductId, modalProducts]);
+
+  React.useEffect(() => {
+    if (formProductId) {
+      const meta = getProductMeta(parseInt(formProductId));
+      const sizes = (meta as any)?.sizes || [];
+      if (sizes.length > 0) {
+        const initSizes: Record<string, string> = {};
+        sizes.forEach((s: any) => {
+          initSizes[s.name] = (s.quantity ?? 0).toString();
+        });
+        setSizeStocks(initSizes);
+        if (!formSizeName || !sizes.some((s: any) => s.name === formSizeName)) {
+          setFormSizeName(sizes[0]?.name || '');
+          setFormStockValue((sizes[0]?.quantity ?? 0).toString());
+        }
+      } else {
+        setSizeStocks({});
+        setFormSizeName('');
+      }
+    }
+  }, [formProductId, productsWithSizes]);
 
   React.useEffect(() => {
     const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
@@ -489,7 +566,32 @@ export default function InventoryView({
                           color: getStatusColor(status),
                         }}
                       >
-                        {p.stock}
+                        <div>
+                          <span className="font-bold text-[14px]">{p.stock}</span>
+                          {(() => {
+                            const meta = getProductMeta(p.id) || p;
+                            const sizes = (meta as any)?.sizes || [];
+                            if (sizes.length === 0) return null;
+                            return (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {sizes.map((s: any) => (
+                                  <span
+                                    key={s.id || s.name}
+                                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium border"
+                                    style={{
+                                      background: s.quantity === 0 ? '#FCEBEB' : s.quantity <= 5 ? '#FAEEDA' : '#F3F4F6',
+                                      color: s.quantity === 0 ? '#A32D2D' : s.quantity <= 5 ? '#854F0B' : '#374151',
+                                      borderColor: s.quantity === 0 ? '#F87171' : s.quantity <= 5 ? '#FBBF24' : '#E5E7EB',
+                                    }}
+                                  >
+                                    <span>{s.name}:</span>
+                                    <span className="font-bold">{s.quantity ?? 0}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                        </div>
                       </td>
                       <td
                         style={{
@@ -546,6 +648,24 @@ export default function InventoryView({
                             setBatchName(p.batchName !== t.na ? p.batchName : '');
                             setMfgDate(p.rawMfgDate ? p.rawMfgDate.split('T')[0] : '');
                             setExpDate(p.rawExpDate ? p.rawExpDate.split('T')[0] : '');
+
+                            const meta = getProductMeta(p.id) || p;
+                            const sizes = (meta as any)?.sizes || [];
+                            if (sizes.length > 0) {
+                              const initSizes: Record<string, string> = {};
+                              sizes.forEach((s: any) => {
+                                initSizes[s.name] = (s.quantity ?? 0).toString();
+                              });
+                              setSizeStocks(initSizes);
+                              setFormSizeName(sizes[0]?.name || '');
+                              setFormStockValue((sizes[0]?.quantity ?? 0).toString());
+                              setSizeAdjustmentMode('all');
+                            } else {
+                              setSizeStocks({});
+                              setFormSizeName('');
+                              setSizeAdjustmentMode('single');
+                            }
+
                             setModalOpen(true);
                           }}
                           className="cursor-pointer rounded border px-2 py-1 text-xs font-medium transition-all"
@@ -686,99 +806,248 @@ export default function InventoryView({
                 </div>
               </div>
 
-              <div className={`grid gap-3 ${isMobile ? 'grid-cols-1' : 'grid-cols-3'}`}>
-                <div>
-                  <label
-                    className="mb-1.5 block text-xs font-bold uppercase tracking-[0.05em]"
-                    style={{ color: Theme.mutedFg }}
-                  >
-                    {t.inventory.mode}
-                  </label>
-                  <div className="flex gap-1 rounded-lg p-[3px]" style={{ background: Theme.muted }}>
-                    {(['set', 'add'] as const).map((mode) => (
-                      <button
-                        key={mode}
-                        onClick={() => setFormMode(mode)}
-                        className="flex-1 cursor-pointer rounded-md border-none px-2 py-2 text-xs font-semibold capitalize"
-                        style={{
-                          background: formMode === mode ? '#fff' : 'transparent',
-                          color: formMode === mode ? Theme.primary : Theme.mutedFg,
-                          boxShadow: formMode === mode ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
-                        }}
-                      >
-                        {mode === 'set' ? `🔢 ${t.inventory.setStock}` : `➕ ${t.inventory.addToStock}`}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label
-                    className="mb-1.5 block text-xs font-bold uppercase tracking-[0.05em]"
-                    style={{ color: Theme.mutedFg }}
-                  >
-                    {formMode === 'set' ? t.inventory.newStock : t.inventory.addQuantity}
-                  </label>
-                  <input
-                    type="number"
-                    value={formStockValue}
-                    onChange={(e) => setFormStockValue(e.target.value)}
-                    placeholder={formMode === 'set' ? 'e.g., 50' : 'e.g., 10'}
-                    className="w-full rounded-lg px-3 py-2.5 text-[13px] outline-none"
-                    style={{ border: `1px solid ${Theme.border}`, color: Theme.fg }}
-                  />
-                </div>
-
-                <div>
-                  <label
-                    className="mb-1.5 block text-xs font-bold uppercase tracking-[0.05em]"
-                    style={{ color: Theme.mutedFg }}
-                  >
-                    {t.inventory.currentStock}
-                  </label>
-                  <div
-                    className="rounded-lg px-3 py-2.5 text-[13px] font-bold"
-                    style={{
-                      border: `1px solid ${Theme.border}`,
-                      color: Theme.primary,
-                      background: Theme.muted,
-                    }}
-                  >
-                    {selectedProduct?.stock ?? 0}
-                  </div>
-                </div>
-              </div>
-
-              {/* Size selector — shown when product has sizes */}
+              {/* Product Size Management in Modal */}
               {(() => {
                 const meta = formProductId ? getProductMeta(parseInt(formProductId)) : null;
                 const sizes = (meta as any)?.sizes || [];
-                if (sizes.length === 0) return null;
-                return (
-                  <div className="mt-3">
-                    <label
-                      className="mb-1.5 block text-xs font-bold uppercase tracking-[0.05em]"
-                      style={{ color: Theme.mutedFg }}
-                    >
-                      {t.inventory.size}
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {sizes.map((s: any) => (
-                        <button
-                          key={s.name}
-                          type="button"
-                          onClick={() => setFormSizeName(s.name)}
-                          className="rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer"
+                if (sizes.length === 0) {
+                  return (
+                    <div className={`grid gap-3 ${isMobile ? 'grid-cols-1' : 'grid-cols-3'}`}>
+                      <div>
+                        <label
+                          className="mb-1.5 block text-xs font-bold uppercase tracking-[0.05em]"
+                          style={{ color: Theme.mutedFg }}
+                        >
+                          {t.inventory.mode}
+                        </label>
+                        <div className="flex gap-1 rounded-lg p-[3px]" style={{ background: Theme.muted }}>
+                          {(['set', 'add'] as const).map((mode) => (
+                            <button
+                              key={mode}
+                              type="button"
+                              onClick={() => setFormMode(mode)}
+                              className="flex-1 cursor-pointer rounded-md border-none px-2 py-2 text-xs font-semibold capitalize"
+                              style={{
+                                background: formMode === mode ? '#fff' : 'transparent',
+                                color: formMode === mode ? Theme.primary : Theme.mutedFg,
+                                boxShadow: formMode === mode ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                              }}
+                            >
+                              {mode === 'set' ? `🔢 ${t.inventory.setStock}` : `➕ ${t.inventory.addToStock}`}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label
+                          className="mb-1.5 block text-xs font-bold uppercase tracking-[0.05em]"
+                          style={{ color: Theme.mutedFg }}
+                        >
+                          {formMode === 'set' ? t.inventory.newStock : t.inventory.addQuantity}
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formStockValue}
+                          onChange={(e) => setFormStockValue(e.target.value)}
+                          placeholder={formMode === 'set' ? 'e.g., 50' : 'e.g., 10'}
+                          className="w-full rounded-lg px-3 py-2.5 text-[13px] outline-none"
+                          style={{ border: `1px solid ${Theme.border}`, color: Theme.fg }}
+                        />
+                      </div>
+
+                      <div>
+                        <label
+                          className="mb-1.5 block text-xs font-bold uppercase tracking-[0.05em]"
+                          style={{ color: Theme.mutedFg }}
+                        >
+                          {t.inventory.currentStock}
+                        </label>
+                        <div
+                          className="rounded-lg px-3 py-2.5 text-[13px] font-bold"
                           style={{
-                            borderColor: formSizeName === s.name ? Theme.primary : Theme.border,
-                            background: formSizeName === s.name ? Theme.primary : '#fff',
-                            color: formSizeName === s.name ? '#fff' : Theme.fg,
+                            border: `1px solid ${Theme.border}`,
+                            color: Theme.primary,
+                            background: Theme.muted,
                           }}
                         >
-                          {s.name}
-                        </button>
-                      ))}
+                          {selectedProduct?.stock ?? 0}
+                        </div>
+                      </div>
                     </div>
+                  );
+                }
+
+                // PRODUCT HAS SIZES
+                return (
+                  <div className="mt-2 flex flex-col gap-3">
+                    {/* Size Adjustment Mode Switcher */}
+                    <div className="flex items-center justify-between border-b pb-2" style={{ borderColor: Theme.border }}>
+                      <div className="text-xs font-bold uppercase tracking-[0.05em]" style={{ color: Theme.mutedFg }}>
+                        {t.inventory.sizeBreakdown || 'Product Sizes Stock'}
+                      </div>
+                      <div className="flex gap-1 rounded-lg p-[3px]" style={{ background: Theme.muted }}>
+                        <button
+                          type="button"
+                          onClick={() => setSizeAdjustmentMode('all')}
+                          className="cursor-pointer rounded-md border-none px-3 py-1.5 text-xs font-semibold"
+                          style={{
+                            background: sizeAdjustmentMode === 'all' ? '#fff' : 'transparent',
+                            color: sizeAdjustmentMode === 'all' ? Theme.primary : Theme.mutedFg,
+                            boxShadow: sizeAdjustmentMode === 'all' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                          }}
+                        >
+                          📋 {t.inventory.allSizes || 'All Sizes'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSizeAdjustmentMode('single');
+                            const sName = formSizeName || sizes[0]?.name;
+                            setFormSizeName(sName);
+                            const sObj = sizes.find((s: any) => s.name === sName);
+                            setFormStockValue((sObj?.quantity ?? 0).toString());
+                          }}
+                          className="cursor-pointer rounded-md border-none px-3 py-1.5 text-xs font-semibold"
+                          style={{
+                            background: sizeAdjustmentMode === 'single' ? '#fff' : 'transparent',
+                            color: sizeAdjustmentMode === 'single' ? Theme.primary : Theme.mutedFg,
+                            boxShadow: sizeAdjustmentMode === 'single' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                          }}
+                        >
+                          🎯 {t.inventory.sizeStock || 'Single Size'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {sizeAdjustmentMode === 'all' ? (
+                      <div className="rounded-xl border p-3.5 bg-gray-50/50" style={{ borderColor: Theme.border }}>
+                        <div className="mb-2.5 text-xs text-muted-foreground">
+                          Enter stock for each size. The total inventory stock will automatically equal the sum of all sizes.
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          {sizes.map((s: any) => (
+                            <div key={s.name} className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-white border border-gray-100">
+                              <div className="min-w-0">
+                                <span className="font-semibold text-sm text-foreground">{s.name}</span>
+                                <div className="text-[11px] text-muted-foreground">
+                                  Current: <span className="font-bold text-gray-700">{s.quantity ?? 0}</span> units
+                                </div>
+                              </div>
+                              <div className="w-36">
+                                <label className="block text-[10px] font-semibold text-muted-foreground mb-0.5">New Stock</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  className="w-full box-border rounded-lg border border-border bg-white px-3 py-1.5 text-[13px] text-foreground outline-none font-bold"
+                                  value={sizeStocks[s.name] ?? (s.quantity ?? 0).toString()}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setSizeStocks(prev => ({ ...prev, [s.name]: val }));
+                                  }}
+                                  placeholder="0"
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Sum of all sizes display */}
+                        <div className="mt-3 flex items-center justify-between p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900">
+                          <span className="text-xs font-bold">{t.inventory.totalSizesStock || 'Total Stock (Sum of Sizes)'}:</span>
+                          <span className="text-base font-extrabold text-emerald-700">{totalSizeStocksSum} units</span>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Single Size Adjustment Mode */
+                      <div className="flex flex-col gap-3">
+                        <div>
+                          <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.05em]" style={{ color: Theme.mutedFg }}>
+                            {t.inventory.size}
+                          </label>
+                          <div className="flex flex-wrap gap-2">
+                            {sizes.map((s: any) => (
+                              <button
+                                key={s.name}
+                                type="button"
+                                onClick={() => {
+                                  setFormSizeName(s.name);
+                                  setFormStockValue((s.quantity ?? 0).toString());
+                                }}
+                                className="rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+                                style={{
+                                  borderColor: formSizeName === s.name ? Theme.primary : Theme.border,
+                                  background: formSizeName === s.name ? Theme.primary : '#fff',
+                                  color: formSizeName === s.name ? '#fff' : Theme.fg,
+                                }}
+                              >
+                                <span>{s.name}</span>
+                                <span className={`text-[10px] px-1 rounded ${formSizeName === s.name ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'}`}>
+                                  {s.quantity ?? 0}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className={`grid gap-3 ${isMobile ? 'grid-cols-1' : 'grid-cols-3'}`}>
+                          <div>
+                            <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.05em]" style={{ color: Theme.mutedFg }}>
+                              {t.inventory.mode}
+                            </label>
+                            <div className="flex gap-1 rounded-lg p-[3px]" style={{ background: Theme.muted }}>
+                              {(['set', 'add'] as const).map((mode) => (
+                                <button
+                                  key={mode}
+                                  type="button"
+                                  onClick={() => setFormMode(mode)}
+                                  className="flex-1 cursor-pointer rounded-md border-none px-2 py-2 text-xs font-semibold capitalize"
+                                  style={{
+                                    background: formMode === mode ? '#fff' : 'transparent',
+                                    color: formMode === mode ? Theme.primary : Theme.mutedFg,
+                                    boxShadow: formMode === mode ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                                  }}
+                                >
+                                  {mode === 'set' ? `🔢 ${t.inventory.setStock}` : `➕ ${t.inventory.addToStock}`}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.05em]" style={{ color: Theme.mutedFg }}>
+                              {formMode === 'set' ? `New Stock for ${formSizeName}` : `Add Qty to ${formSizeName}`}
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={formStockValue}
+                              onChange={(e) => setFormStockValue(e.target.value)}
+                              placeholder={formMode === 'set' ? 'e.g., 50' : 'e.g., 10'}
+                              className="w-full rounded-lg px-3 py-2.5 text-[13px] outline-none"
+                              style={{ border: `1px solid ${Theme.border}`, color: Theme.fg }}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.05em]" style={{ color: Theme.mutedFg }}>
+                              Current {formSizeName} Stock
+                            </label>
+                            <div
+                              className="rounded-lg px-3 py-2.5 text-[13px] font-bold"
+                              style={{
+                                border: `1px solid ${Theme.border}`,
+                                color: Theme.primary,
+                                background: Theme.muted,
+                              }}
+                            >
+                              {(sizes.find((s: any) => s.name === formSizeName)?.quantity ?? 0)} units
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -836,7 +1105,12 @@ export default function InventoryView({
               )}
 
               <Btn onClick={handleFormSubmit} className="mt-3.5 w-full" disabled={adjustStockMutation.isPending}>
-                ✓ {formMode === 'set' ? t.inventory.setStock : t.inventory.addToStock}
+                ✓ {(() => {
+                  const meta = formProductId ? getProductMeta(parseInt(formProductId)) : null;
+                  const hasSizes = ((meta as any)?.sizes || []).length > 0;
+                  if (hasSizes && sizeAdjustmentMode === 'all') return `Save Size Stocks (Total: ${totalSizeStocksSum} units)`;
+                  return formMode === 'set' ? t.inventory.setStock : t.inventory.addToStock;
+                })()}
               </Btn>
             </Card>
           </div>

@@ -117,6 +117,16 @@ export class ManualReturnService {
         });
       }
 
+      // Increment size quantity for items returned with a specific size
+      for (const item of lineItems) {
+        if (item.sizeName) {
+          await tx.productSize.updateMany({
+            where: { productId: item.productId, name: item.sizeName },
+            data: { quantity: { increment: item.quantity } },
+          });
+        }
+      }
+
       return {
         id: manualReturn.id,
         returnNumber: manualReturn.returnNumber,

@@ -20,6 +20,7 @@ export interface CreateProductPayload {
     imageUrl?: string | null;
     priceOverride?: number | null;
     costPriceOverride?: number | null;
+    quantity?: number;
     isActive?: boolean;
   }>;
 }

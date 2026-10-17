@@ -32,7 +32,15 @@ export class InventoryService {
     const [data, total] = await Promise.all([
       prisma.inventory.findMany({
         where,
-        include: { product: true, branch: true, transactions: { take: 5, orderBy: { createdAt: 'desc' } } },
+        include: {
+          product: {
+            include: {
+              sizes: { orderBy: { sortOrder: 'asc' } },
+            },
+          },
+          branch: true,
+          transactions: { take: 5, orderBy: { createdAt: 'desc' } },
+        },
         skip,
         take,
         orderBy: { updatedAt: 'desc' },
@@ -44,7 +52,15 @@ export class InventoryService {
       data: data.map(inv => ({
         id: inv.id,
         productId: inv.productId,
-        product: { id: inv.product.id, name: inv.product.name, sku: inv.product.sku, price: inv.product.price },
+        product: {
+          id: inv.product.id,
+          name: inv.product.name,
+          sku: inv.product.sku,
+          price: inv.product.price,
+          unitType: inv.product.unitType,
+          unitLabel: inv.product.unitLabel,
+          sizes: inv.product.sizes,
+        },
         quantity: inv.quantity,
         reservedQty: inv.reservedQty,
         availableQty: inv.quantity - inv.reservedQty,
@@ -61,7 +77,12 @@ export class InventoryService {
   }
 
   async getProductStockDetails(productId: number) {
-    const product = await prisma.product.findUnique({ where: { id: productId } });
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      include: {
+        sizes: { orderBy: { sortOrder: 'asc' } },
+      },
+    });
     if (!product) throw new NotFoundError('Product not found');
 
     const inventoryRows = await prisma.inventory.findMany({
@@ -80,7 +101,7 @@ export class InventoryService {
 
     return {
       productId,
-      product: { name: product.name, sku: product.sku, price: product.price },
+      product: { name: product.name, sku: product.sku, price: product.price, sizes: product.sizes },
       totalQuantity,
       totalReserved,
       availableQty: totalQuantity - totalReserved,
@@ -131,7 +152,36 @@ export class InventoryService {
       if (!inventory) throw new NotFoundError('Inventory record not found');
 
       const beforeQty = inventory.quantity;
-      const newBalance = beforeQty + data.quantity;
+      let newBalance = beforeQty + data.quantity;
+
+      // Handle size-level quantity updates
+      if (data.sizeName) {
+        const sizeRecord = await tx.productSize.findFirst({
+          where: { productId: data.productId, name: data.sizeName },
+        });
+        if (sizeRecord) {
+          const updatedSizeQty = Math.max(0, sizeRecord.quantity + data.quantity);
+          await tx.productSize.update({
+            where: { id: sizeRecord.id },
+            data: { quantity: updatedSizeQty },
+          });
+        }
+      } else if (data.sizes && data.sizes.length > 0) {
+        for (const s of data.sizes) {
+          await tx.productSize.updateMany({
+            where: { productId: data.productId, name: s.name },
+            data: { quantity: Math.max(0, s.quantity) },
+          });
+        }
+      }
+
+      // If product has sizes, keep total inventory quantity synchronized with the sum of all sizes
+      const productSizes = await tx.productSize.findMany({
+        where: { productId: data.productId },
+      });
+      if (productSizes.length > 0 && (data.sizeName || (data.sizes && data.sizes.length > 0))) {
+        newBalance = productSizes.reduce((sum, s) => sum + s.quantity, 0);
+      }
 
       const transaction = await tx.inventoryTransaction.create({
         data: {

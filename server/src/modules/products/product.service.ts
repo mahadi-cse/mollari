@@ -70,6 +70,7 @@ export class ProductService {
                   imageUrl: s.imageUrl || null,
                   priceOverride: s.priceOverride || null,
                   costPriceOverride: s.costPriceOverride || null,
+                  quantity: s.quantity ?? 0,
                   isActive: s.isActive ?? true,
                 })),
               },
@@ -80,11 +81,15 @@ export class ProductService {
     });
 
     const defaultBranchId = data.branchId || (await this.getDefaultBranchId());
+    const totalOpeningStock = (data.sizes && data.sizes.length > 0)
+      ? data.sizes.reduce((sum, s) => sum + (Number(s.quantity) || 0), 0)
+      : (data.openingStock || 0);
+
     await prisma.inventory.create({
       data: {
         productId: product.id,
         warehouseId: defaultBranchId,
-        quantity: data.openingStock || 0,
+        quantity: totalOpeningStock,
         reservedQty: 0,
         lowStockThreshold: 10,
       },
@@ -247,9 +252,23 @@ export class ProductService {
             imageUrl: s.imageUrl || null,
             priceOverride: s.priceOverride || null,
             costPriceOverride: s.costPriceOverride || null,
+            quantity: s.quantity ?? 0,
             isActive: s.isActive ?? true,
           })),
         });
+
+        // Sync total inventory quantity if sizes were updated
+        const totalSizeStock = data.sizes.reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
+        const existingInv = await prisma.inventory.findFirst({
+          where: { productId: id },
+          orderBy: { id: 'asc' },
+        });
+        if (existingInv) {
+          await prisma.inventory.update({
+            where: { id: existingInv.id },
+            data: { quantity: totalSizeStock },
+          });
+        }
       }
     }
 

@@ -338,6 +338,7 @@ model ProductSize {
   imageUrl          String?   // Each size can have its own image
   priceOverride     Decimal?  @db.Decimal(10,2) // Optional price override for this size
   costPriceOverride Decimal?  @db.Decimal(10,2) // Optional cost price override for this size
+  quantity          Int       @default(0)
   isActive          Boolean   @default(true)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt

@@ -20,11 +20,13 @@ export interface ProductInventorySnapshot {
 
 export interface ProductSize {
   id: number;
+  productId?: number;
   name: string;
   sortOrder: number;
   imageUrl?: string | null;
   priceOverride?: number | null;
   costPriceOverride?: number | null;
+  quantity?: number;
   isActive: boolean;
 }
 

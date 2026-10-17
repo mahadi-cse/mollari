@@ -21,6 +21,7 @@ export interface AdjustStockRequest {
   manufactureDate?: string;
   expiryDate?: string;
   sizeName?: string;
+  sizes?: Array<{ name: string; quantity: number }>;
 }
 
 export interface TransferStockRequest {

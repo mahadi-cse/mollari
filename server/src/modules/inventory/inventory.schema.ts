@@ -12,6 +12,10 @@ export const adjustStockSchema = z.object({
   manufactureDate: z.string().datetime().optional(),
   expiryDate: z.string().datetime().optional(),
   sizeName: z.string().optional(),
+  sizes: z.array(z.object({
+    name: z.string(),
+    quantity: z.coerce.number().int().nonnegative(),
+  })).optional(),
 });
 
 export const transferStockSchema = z.object({

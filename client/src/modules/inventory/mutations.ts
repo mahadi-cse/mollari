@@ -9,6 +9,7 @@ export const useAdjustStockMutation = (options?: any) => {
     mutationFn: (data: AdjustStockRequest) => inventoryAPI.adjustStock(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: INVENTORY_QUERY_KEYS.all });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
     },
     ...options,
   });
