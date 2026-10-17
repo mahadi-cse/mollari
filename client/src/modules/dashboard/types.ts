@@ -8,6 +8,10 @@ export interface Product {
   sold: number;
   manualSold: number;
   status: 'active' | 'low' | 'out';
+  warehouse?: string;
+  sizes?: any[];
+  unitType?: 'PIECE' | 'WEIGHT';
+  unitLabel?: string;
 }
 
 export interface SellLog {

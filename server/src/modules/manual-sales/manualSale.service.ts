@@ -177,9 +177,17 @@ export class ManualSaleService {
         });
       }
 
-      // Decrement size quantity for items sold with a specific size
+      // Validate and decrement size quantity for items sold with a specific size
       for (const item of lineItems) {
         if (item.sizeName) {
+          const productSize = await tx.productSize.findFirst({
+            where: { productId: item.productId, name: item.sizeName },
+          });
+          if (productSize && productSize.quantity < item.quantity) {
+            throw new ConflictError(
+              `Insufficient stock for ${item.productNameSnapshot} (Size: ${item.sizeName}). Available: ${productSize.quantity}, requested: ${item.quantity}`
+            );
+          }
           await tx.productSize.updateMany({
             where: { productId: item.productId, name: item.sizeName },
             data: { quantity: { decrement: item.quantity } },

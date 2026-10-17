@@ -32,7 +32,7 @@ interface SaleLineItem {
   unitType: 'PIECE' | 'WEIGHT';
   unitLabel: string;
   sizeName: string;
-  sizes: Array<{ name: string; imageUrl?: string | null; priceOverride?: number | null }>;
+  sizes: Array<{ name: string; quantity?: number; imageUrl?: string | null; priceOverride?: number | null; costPriceOverride?: number | null; isActive?: boolean }>;
 }
 
 const SALES_BRANCH_STORAGE_KEY = 'dashboard.sales.selectedBranchId';
@@ -348,9 +348,6 @@ export default function SalesView({
     { limit: 500, ...(saleBranchId ? { branchId: Number(saleBranchId) } : {}) } as any,
     { queryKey: ['products', 'list', 'sales-meta', { branchId: saleBranchId }], enabled: !!saleBranchId }
   );
-  const getProductMeta = (productId: number) =>
-    productsMetaList.find((p: any) => p.id === productId);
-
   const branchProducts: Product[] = branchInventoryData.map((item: any) => ({
     id: item.productId || item.product?.id,
     name: item.product?.name || t.unknownProduct,
@@ -362,15 +359,55 @@ export default function SalesView({
     sold: 0,
     manualSold: 0,
     status: 'active',
+    unitType: item.product?.unitType || 'PIECE',
+    unitLabel: item.product?.unitLabel || 'pc',
+    sizes: (item.product?.sizes || []).filter((s: any) => s.isActive !== false),
   }));
+
+  const getProductMeta = (productId: number) => {
+    const liveInv = branchProducts.find((p: any) => p.id === productId);
+    const meta = productsMetaList.find((p: any) => p.id === productId);
+    if (!liveInv) return meta;
+    return {
+      ...meta,
+      ...liveInv,
+      sizes: (liveInv.sizes && liveInv.sizes.length > 0) ? liveInv.sizes : (meta?.sizes || []),
+    };
+  };
+
   const searchableProducts = branchProducts;
 
   const grandTotal = lineItems.reduce((sum, item) => sum + item.total, 0);
   const totalQty = lineItems.reduce((sum, item) => sum + item.qty, 0);
   const totalItems = lineItems.length;
-  const hasInvalidLine = lineItems.some((item) => {
+  const getMaxEditableQty = (productId: number, rowIndex: number) => {
+    const item = lineItems[rowIndex];
+    const product = searchableProducts.find((p) => p.id === productId);
+    if (!product) return 1;
+
+    if (item && item.sizeName && item.sizes && item.sizes.length > 0) {
+      const matchedSize = item.sizes.find((s: any) => s.name === item.sizeName);
+      if (matchedSize && matchedSize.quantity !== undefined) {
+        const usedByOthers = lineItems.reduce((sum, li, idx) => {
+          if (idx === rowIndex || li.productId !== productId || li.sizeName !== item.sizeName) return sum;
+          return sum + li.qty;
+        }, 0);
+        return Math.max(1, (matchedSize.quantity ?? 0) - usedByOthers);
+      }
+    }
+
+    const usedByOthers = lineItems.reduce((sum, item, idx) => {
+      if (idx === rowIndex || item.productId !== productId) return sum;
+      return sum + item.qty;
+    }, 0);
+    return Math.max(1, product.stock - usedByOthers);
+  };
+
+  const hasInvalidLine = lineItems.some((item, idx) => {
     const product = searchableProducts.find((p) => p.id === item.productId);
-    return !product || item.qty > product.stock || item.qty < 1 || item.unitPrice < 0;
+    if (!product) return true;
+    const maxQty = getMaxEditableQty(item.productId, idx);
+    return item.qty > maxQty || item.qty < 1 || item.unitPrice < 0;
   });
 
   const filteredProducts = searchableProducts.filter((p) =>
@@ -430,20 +467,29 @@ export default function SalesView({
 
   const addCartItem = (product: Product, sizeName: string, sizes: any[]) => {
     const meta = getProductMeta(product.id) as any;
-    const unitType = meta?.unitType || 'PIECE';
-    const unitLabel = meta?.unitLabel || 'pc';
+    const unitType = meta?.unitType || product.unitType || 'PIECE';
+    const unitLabel = meta?.unitLabel || product.unitLabel || 'pc';
     const defaultQty = 1;
     const matchedSizeObj = sizes.find((s: any) => s.name === sizeName);
-    const resolvedPrice = matchedSizeObj && matchedSizeObj.priceOverride !== null && matchedSizeObj.priceOverride !== undefined
+    const resolvedPrice = matchedSizeObj && matchedSizeObj.priceOverride !== null && matchedSizeObj.priceOverride !== undefined && Number(matchedSizeObj.priceOverride) > 0
       ? Number(matchedSizeObj.priceOverride)
       : Number(product.price ?? 0);
+
+    const sizeStock = matchedSizeObj && matchedSizeObj.quantity !== undefined
+      ? Number(matchedSizeObj.quantity)
+      : Number(product.stock ?? 0);
+
+    if (sizes.length > 0 && sizeStock <= 0) {
+      toast.error(`Size ${sizeName} is out of stock!`);
+      return;
+    }
 
     setLineItems((prev) => {
       const existingIdx = prev.findIndex((i) => i.productId === product.id && i.sizeName === sizeName);
       if (existingIdx !== -1) {
         return prev.map((i, idx) => {
           if (idx !== existingIdx) return i;
-          const maxQty = product.stock;
+          const maxQty = sizeStock;
           const nextQty = Math.min(maxQty, i.qty + 1);
           return { ...i, qty: nextQty, total: nextQty * i.unitPrice };
         });
@@ -454,9 +500,9 @@ export default function SalesView({
           productId: product.id,
           name: product.name,
           sku: product.sku,
-          qty: defaultQty,
+          qty: Math.min(defaultQty, Math.max(1, sizeStock)),
           unitPrice: resolvedPrice,
-          total: resolvedPrice * defaultQty,
+          total: resolvedPrice * Math.min(defaultQty, Math.max(1, sizeStock)),
           unitType,
           unitLabel,
           sizeName,
@@ -470,8 +516,9 @@ export default function SalesView({
 
   const handleSelectProduct = (product: Product) => {
     const meta = getProductMeta(product.id) as any;
-    const sizes = (meta?.sizes || []).filter((s: any) => s.isActive !== false);
-    const defaultSize = sizes.length > 0 ? sizes[0].name : '';
+    const sizes = (meta?.sizes || product.sizes || []).filter((s: any) => s.isActive !== false);
+    const availableSize = sizes.find((s: any) => (s.quantity ?? 0) > 0) || sizes[0];
+    const defaultSize = availableSize ? availableSize.name : '';
     addCartItem(product, defaultSize, sizes);
   };
 
@@ -514,16 +561,6 @@ export default function SalesView({
         toast.error(t.sales.failedRecord);
       }
     }
-  };
-
-  const getMaxEditableQty = (productId: number, rowIndex: number) => {
-    const product = searchableProducts.find((p) => p.id === productId);
-    if (!product) return 1;
-    const usedByOthers = lineItems.reduce((sum, item, idx) => {
-      if (idx === rowIndex || item.productId !== productId) return sum;
-      return sum + item.qty;
-    }, 0);
-    return Math.max(1, product.stock - usedByOthers);
   };
 
   const updateLineItem = (index: number, patch: Partial<Pick<SaleLineItem, 'qty' | 'unitPrice'>>) => {
@@ -681,26 +718,57 @@ export default function SalesView({
                       }}
                     >
                       {filteredProducts.length > 0 ? (
-                        filteredProducts.map((p) => (
-                          <button
-                            key={p.id}
-                            onClick={() => handleSelectProduct(p)}
-                            className="w-full px-3 py-2 border-b text-left cursor-pointer text-xs flex justify-between items-center font-medium hover:bg-pink-50/30 transition-colors"
-                            style={{
-                              background: 'transparent',
-                              color: Theme.fg,
-                              borderColor: Theme.border,
-                            }}
-                          >
-                            <div>
-                              <div className="font-semibold">{p.name}</div>
-                              <div className="text-xs" style={{ color: Theme.mutedFg }}>{t.modal.sku}: {p.sku}</div>
+                        filteredProducts.map((p) => {
+                          const pSizes = (p.sizes && p.sizes.length > 0) ? p.sizes : ((getProductMeta(p.id) as any)?.sizes || []);
+                          return (
+                            <div
+                              key={p.id}
+                              onClick={() => handleSelectProduct(p)}
+                              className="w-full px-3 py-2.5 border-b text-left cursor-pointer text-xs flex justify-between items-center font-medium hover:bg-pink-50/40 transition-colors"
+                              style={{
+                                background: 'transparent',
+                                color: Theme.fg,
+                                borderColor: Theme.border,
+                              }}
+                            >
+                              <div className="min-w-0 pr-2">
+                                <div className="font-semibold text-sm">{p.name}</div>
+                                <div className="text-[11px]" style={{ color: Theme.mutedFg }}>{t.modal.sku}: {p.sku}</div>
+                                {pSizes.length > 0 && (
+                                  <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                    <span className="text-[10px] text-zinc-500 font-semibold">{t.inventory?.sizeBreakdown || 'Sizes'}:</span>
+                                    {pSizes.map((s: any) => {
+                                      const isAvailable = (s.quantity ?? 0) > 0;
+                                      return (
+                                        <span
+                                          key={s.name}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            addCartItem(p, s.name, pSizes);
+                                          }}
+                                          className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border transition-all ${
+                                            isAvailable
+                                              ? 'bg-pink-50 text-pink-700 border-pink-200 hover:bg-pink-100 hover:border-pink-300 cursor-pointer shadow-xs'
+                                              : 'bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed line-through'
+                                          }`}
+                                          title={isAvailable ? `Add size ${s.name} (${s.quantity} in stock)` : `Size ${s.name} is out of stock`}
+                                        >
+                                          {s.name}: <strong className="ml-1">{s.quantity ?? 0}</strong>
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="text-xs shrink-0 text-right font-semibold" style={{ color: Theme.fg }}>
+                                <div className="text-sm font-bold text-pink-600">{formatCurrency(p.price)}</div>
+                                <div className="text-[11px] font-normal" style={{ color: Theme.mutedFg }}>
+                                  {t.inventory.stock}: <span className="font-bold text-gray-800">{p.stock}</span>
+                                </div>
+                              </div>
                             </div>
-                            <div className="text-xs ml-2" style={{ color: Theme.mutedFg }}>
-                              {t.inventory.stock}: {p.stock}
-                            </div>
-                          </button>
-                        ))
+                          );
+                        })
                       ) : (
                         <div className="px-3 py-3 text-center text-xs" style={{ color: Theme.mutedFg }}>
                           {t.sales.noProductsBranch}
@@ -737,7 +805,7 @@ export default function SalesView({
                                 {item.sku} · {item.unitType === 'WEIGHT' ? '⚖️' : '📦'} {item.unitLabel}
                               </div>
                               {item.sizes.length > 0 && (
-                                <div className="mt-1">
+                                <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                                   <select
                                     value={item.sizeName}
                                     onChange={(e) => {
@@ -757,7 +825,9 @@ export default function SalesView({
                                           );
                                           const hasOverride = matchedSize && matchedSize.priceOverride !== null && matchedSize.priceOverride !== undefined && Number(matchedSize.priceOverride) > 0;
                                           const newPrice = hasOverride ? Number(matchedSize.priceOverride) : basePrice;
-                                          return { ...li, sizeName: selectedName, unitPrice: newPrice, total: li.qty * newPrice };
+                                          const availableStock = matchedSize && matchedSize.quantity !== undefined ? matchedSize.quantity : branchProduct?.stock;
+                                          const adjustedQty = availableStock !== undefined ? Math.min(li.qty, Math.max(1, availableStock)) : li.qty;
+                                          return { ...li, sizeName: selectedName, unitPrice: newPrice, qty: adjustedQty, total: adjustedQty * newPrice };
                                         })
                                       );
                                     }}
@@ -765,11 +835,23 @@ export default function SalesView({
                                     style={{ borderColor: Theme.border, color: Theme.fg }}
                                   >
                                     {item.sizes.map((s: any) => (
-                                      <option key={s.name} value={s.name}>
-                                        {s.name}
+                                      <option key={s.name} value={s.name} disabled={s.quantity !== undefined && s.quantity <= 0}>
+                                        {s.name} {s.quantity !== undefined ? `(${s.quantity} in stock)` : ''}
                                       </option>
                                     ))}
                                   </select>
+                                  {(() => {
+                                    const matched = item.sizes.find((s: any) => s.name === item.sizeName);
+                                    const qtyAvail = matched?.quantity;
+                                    if (qtyAvail === undefined) return null;
+                                    return (
+                                      <span className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+                                        qtyAvail > 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'
+                                      }`}>
+                                        {qtyAvail > 0 ? `${qtyAvail} available` : 'Out of stock'}
+                                      </span>
+                                    );
+                                  })()}
                                 </div>
                               )}
                             </div>
@@ -816,6 +898,9 @@ export default function SalesView({
                                   +
                                 </button>
                               </div>
+                              <span className="block text-[10px] mt-0.5 font-medium" style={{ color: Theme.mutedFg }}>
+                                {t.modal.max}: {maxQty}
+                              </span>
                             </div>
 
                             <div>
@@ -851,7 +936,7 @@ export default function SalesView({
                             {item.sku} · {item.unitType === 'WEIGHT' ? '⚖️' : '📦'} {item.unitLabel}
                           </div>
                           {item.sizes.length > 0 && (
-                            <div className="mt-1">
+                            <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                               <select
                                 value={item.sizeName}
                                 onChange={(e) => {
@@ -871,7 +956,9 @@ export default function SalesView({
                                       );
                                       const hasOverride = matchedSize && matchedSize.priceOverride !== null && matchedSize.priceOverride !== undefined && Number(matchedSize.priceOverride) > 0;
                                       const newPrice = hasOverride ? Number(matchedSize.priceOverride) : basePrice;
-                                      return { ...li, sizeName: selectedName, unitPrice: newPrice, total: li.qty * newPrice };
+                                      const availableStock = matchedSize && matchedSize.quantity !== undefined ? matchedSize.quantity : branchProduct?.stock;
+                                      const adjustedQty = availableStock !== undefined ? Math.min(li.qty, Math.max(1, availableStock)) : li.qty;
+                                      return { ...li, sizeName: selectedName, unitPrice: newPrice, qty: adjustedQty, total: adjustedQty * newPrice };
                                     })
                                   );
                                 }}
@@ -879,15 +966,27 @@ export default function SalesView({
                                 style={{ borderColor: Theme.border, color: Theme.fg }}
                               >
                                 {item.sizes.map((s: any) => (
-                                  <option key={s.name} value={s.name}>
-                                    {s.name}
+                                  <option key={s.name} value={s.name} disabled={s.quantity !== undefined && s.quantity <= 0}>
+                                    {s.name} {s.quantity !== undefined ? `(${s.quantity} in stock)` : ''}
                                   </option>
                                 ))}
                               </select>
+                              {(() => {
+                                const matched = item.sizes.find((s: any) => s.name === item.sizeName);
+                                const qtyAvail = matched?.quantity;
+                                if (qtyAvail === undefined) return null;
+                                return (
+                                  <span className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+                                    qtyAvail > 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'
+                                  }`}>
+                                    {qtyAvail > 0 ? `${qtyAvail} available` : 'Out of stock'}
+                                  </span>
+                                );
+                              })()}
                             </div>
                           )}
                         </div>
-                        <div className="col-span-3 flex justify-center">
+                        <div className="col-span-3 flex flex-col items-center">
                           <div className="inline-flex items-center rounded-lg border bg-white overflow-hidden" style={{ borderColor: Theme.border }}>
                             <button
                               className="w-9 h-9 text-base font-bold flex items-center justify-center transition hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
@@ -917,6 +1016,9 @@ export default function SalesView({
                               +
                             </button>
                           </div>
+                          <span className="block text-[10px] mt-1 font-medium" style={{ color: Theme.mutedFg }}>
+                            {t.modal.max}: {maxQty}
+                          </span>
                         </div>
                         <div className="col-span-2">
                           <input
