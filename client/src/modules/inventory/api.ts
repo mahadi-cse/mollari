@@ -32,6 +32,59 @@ export interface TransferStockRequest {
   notes?: string;
 }
 
+export interface InventoryLedgerEntry {
+  id: number;
+  inventoryId: number;
+  productId: number;
+  productName: string;
+  productSku: string;
+  unitLabel?: string | null;
+  branchId: number | null;
+  branchName: string;
+  type: string;
+  quantity: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  reference?: string | null;
+  notes?: string | null;
+  batchName?: string | null;
+  manufactureDate?: string | null;
+  expiryDate?: string | null;
+  sizeName?: string | null;
+  performedBy?: string | null;
+  createdAt: string;
+}
+
+export interface InventoryLedgerSummary {
+  totalIn: number;
+  totalOut: number;
+  netChange: number;
+  totalTransactions: number;
+}
+
+export interface InventoryLedgerParams {
+  page?: number;
+  limit?: number;
+  warehouseId?: number;
+  productId?: number;
+  type?: string;
+  startDate?: string;
+  endDate?: string;
+  search?: string;
+}
+
+export interface InventoryLedgerResponse {
+  success: boolean;
+  data: InventoryLedgerEntry[];
+  summary: InventoryLedgerSummary;
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
 export const inventoryAPI = {
   getInventorySummary: async (params?: InventorySummaryParams) => {
     const response = await apiClient.get<PaginatedResponse<Inventory[]>>('/inventory', {
@@ -109,5 +162,12 @@ export const inventoryAPI = {
       params,
     });
     return response.data.data;
+  },
+
+  getInventoryLedger: async (params?: InventoryLedgerParams): Promise<InventoryLedgerResponse> => {
+    const response = await apiClient.get<InventoryLedgerResponse>('/inventory/ledger', {
+      params,
+    });
+    return response.data;
   },
 };

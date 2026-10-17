@@ -12,6 +12,7 @@ export const adjustStockSchema = z.object({
   manufactureDate: z.string().datetime().optional(),
   expiryDate: z.string().datetime().optional(),
   sizeName: z.string().optional(),
+  performedBy: z.string().optional(),
   sizes: z.array(z.object({
     name: z.string(),
     quantity: z.coerce.number().int().nonnegative(),
@@ -24,6 +25,7 @@ export const transferStockSchema = z.object({
   fromWarehouseId: z.coerce.number().int().positive().optional(),
   toWarehouseId: z.coerce.number().int().positive(),
   notes: z.string().optional(),
+  performedBy: z.string().optional(),
 });
 
 export const reconcileStockSchema = z.object({
@@ -33,6 +35,7 @@ export const reconcileStockSchema = z.object({
     physicalCount: z.coerce.number().int().nonnegative(),
   })),
   notes: z.string().optional(),
+  performedBy: z.string().optional(),
 });
 
 export type AdjustStockInput = z.infer<typeof adjustStockSchema>;

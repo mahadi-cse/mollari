@@ -93,7 +93,7 @@ export default function SalesView({
 
     const formattedDate = new Date(sale.createdAt).toLocaleString();
 
-    const autoprint = `<script>window.onload = function() { setTimeout(function() { window.print(); }, 150); };<\/script>`;  
+    const autoprint = `<script>window.onload = function() { setTimeout(function() { window.print(); }, 150); };<\/script>`;
 
     const receiptHtml = `
       <!DOCTYPE html>
@@ -630,7 +630,7 @@ export default function SalesView({
 
       {/* Add Sale Form Card */}
       <Card className="border border-pink-100 shadow-sm !p-3 sm:!p-5" pad={0}>
-        
+
         <div className="flex flex-col gap-3">
           {/* Header & Branch Selection Side-by-Side */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b" style={{ borderColor: Theme.border }}>
@@ -638,7 +638,7 @@ export default function SalesView({
               <div className="text-[15px] font-bold" style={{ color: Theme.fg }}>{t.sales.addNewSale}</div>
               <div className="text-[12px] hidden sm:block" style={{ color: Theme.mutedFg }}>{t.sales.recordManualTx}</div>
             </div>
-            
+
             <div className="flex items-center gap-2">
               <div className="w-5.5 h-5.5 min-w-[22px] rounded-full flex items-center justify-center text-[10px] font-extrabold text-white" style={{ background: Theme.primary }}>
                 {locale === 'bn' ? '১' : '1'}
@@ -678,7 +678,7 @@ export default function SalesView({
               <label className="block text-[13px] font-semibold mb-1.5" style={{ color: Theme.fg }}>
                 {t.sales.step2}
               </label>
-              
+
               {/* Search Row */}
               <div className="flex gap-2 mb-3">
                 <button
@@ -746,11 +746,10 @@ export default function SalesView({
                                             e.stopPropagation();
                                             addCartItem(p, s.name, pSizes);
                                           }}
-                                          className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border transition-all ${
-                                            isAvailable
+                                          className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border transition-all ${isAvailable
                                               ? 'bg-pink-50 text-pink-700 border-pink-200 hover:bg-pink-100 hover:border-pink-300 cursor-pointer shadow-xs'
                                               : 'bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed line-through'
-                                          }`}
+                                            }`}
                                           title={isAvailable ? `Add size ${s.name} (${s.quantity} in stock)` : `Size ${s.name} is out of stock`}
                                         >
                                           {s.name}: <strong className="ml-1">{s.quantity ?? 0}</strong>
@@ -845,9 +844,8 @@ export default function SalesView({
                                     const qtyAvail = matched?.quantity;
                                     if (qtyAvail === undefined) return null;
                                     return (
-                                      <span className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
-                                        qtyAvail > 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'
-                                      }`}>
+                                      <span className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded border ${qtyAvail > 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'
+                                        }`}>
                                         {qtyAvail > 0 ? `${qtyAvail} available` : 'Out of stock'}
                                       </span>
                                     );
@@ -976,9 +974,8 @@ export default function SalesView({
                                 const qtyAvail = matched?.quantity;
                                 if (qtyAvail === undefined) return null;
                                 return (
-                                  <span className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
-                                    qtyAvail > 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'
-                                  }`}>
+                                  <span className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded border ${qtyAvail > 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'
+                                    }`}>
                                     {qtyAvail > 0 ? `${qtyAvail} available` : 'Out of stock'}
                                   </span>
                                 );
@@ -1065,7 +1062,7 @@ export default function SalesView({
               <label className="block text-[13px] font-semibold mb-1.5" style={{ color: Theme.fg }}>
                 {t.sales.step3}
               </label>
-              
+
               {/* Summary Box */}
               <div className="rounded-xl border p-3.5 mb-3.5 transition-shadow hover:shadow-sm" style={{ borderColor: Theme.border, background: '#fff' }}>
                 <div className="flex justify-between mb-2 text-xs" style={{ color: Theme.mutedFg }}>
@@ -1121,11 +1118,11 @@ export default function SalesView({
 
       {/* Sales History */}
       <Card className="!p-3 sm:!p-5" pad={0}>
-        <SecHead 
-          title={t.sales.salesHistory} 
+        <SecHead
+          title={t.sales.salesHistory}
           sub={`${t.sales.totalSales}: ${historyMeta?.total ?? 0}`}
         />
-        
+
         <div className="mt-3.5">
           {/* Controls */}
           <div className="mb-3 grid gap-2 md:grid-cols-3">
@@ -1210,7 +1207,7 @@ export default function SalesView({
                   </tr>
                 ) : historyRows.length > 0 ? (
                   historyRows.map((sale) => (
-                    <tr 
+                    <tr
                       key={sale.saleNumber}
                       className="border-b"
                       style={{ borderColor: Theme.border }}

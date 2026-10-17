@@ -372,11 +372,27 @@ export class OrderService {
           const inventory = lockedRows[0];
           if (!inventory) throw new NotFoundError(`Inventory record vanished for product ${item.productId}`);
 
+          const beforeQty = inventory.quantity;
+          const afterQty = beforeQty - item.quantity;
+
           await tx.inventory.update({
             where: { id: inventory.id },
             data: {
               reservedQty: { decrement: item.quantity },
               quantity: { decrement: item.quantity },
+            },
+          });
+
+          await tx.inventoryTransaction.create({
+            data: {
+              inventoryId: inventory.id,
+              type: 'SALE',
+              quantity: -item.quantity,
+              balanceBefore: beforeQty,
+              balanceAfter: afterQty,
+              reference: order.orderNumber,
+              notes: `Online order delivered (${order.orderNumber})`,
+              performedBy: 'Online System',
             },
           });
         }

@@ -197,6 +197,7 @@ export class InventoryService {
           manufactureDate: data.manufactureDate ? new Date(data.manufactureDate) : undefined,
           expiryDate: data.expiryDate ? new Date(data.expiryDate) : undefined,
           sizeName: data.sizeName || null,
+          performedBy: data.performedBy || 'Staff',
         },
       });
 
@@ -271,6 +272,7 @@ export class InventoryService {
           balanceAfter: afterQty,
           reference: transfer.referenceNumber,
           notes: `Transfer to warehouse ${data.toWarehouseId}: ${data.notes}`,
+          performedBy: data.performedBy || 'Staff',
         },
       });
 
@@ -387,6 +389,7 @@ export class InventoryService {
                 balanceAfter: item.physicalCount,
                 reference: `RECONCILE-${data.warehouseId}`,
                 notes: data.notes || 'Stock reconciliation',
+                performedBy: data.performedBy || 'System Admin',
               },
             });
 
@@ -491,6 +494,136 @@ export class InventoryService {
       warehouse: inv.branch?.name || 'Main',
       lastCountedAt: inv.lastCountedAt,
     }));
+  }
+
+  async getInventoryLedger(filters: {
+    page?: number;
+    limit?: number;
+    warehouseId?: number;
+    productId?: number;
+    type?: string;
+    startDate?: string;
+    endDate?: string;
+    search?: string;
+  }) {
+    const { page = 1, limit = 20, warehouseId, productId, type, startDate, endDate, search } = filters;
+    const { skip, take } = parsePagination({ page, limit });
+
+    const where: any = {};
+
+    if (warehouseId || productId) {
+      where.inventory = {};
+      if (warehouseId) where.inventory.warehouseId = warehouseId;
+      if (productId) where.inventory.productId = productId;
+    }
+
+    if (type && type !== 'ALL') {
+      where.type = type;
+    }
+
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        where.createdAt.gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        where.createdAt.lte = end;
+      }
+    }
+
+    if (search && search.trim()) {
+      const q = search.trim();
+      where.OR = [
+        { reference: { contains: q, mode: 'insensitive' } },
+        { notes: { contains: q, mode: 'insensitive' } },
+        { sizeName: { contains: q, mode: 'insensitive' } },
+        { performedBy: { contains: q, mode: 'insensitive' } },
+        { inventory: { product: { name: { contains: q, mode: 'insensitive' } } } },
+        { inventory: { product: { sku: { contains: q, mode: 'insensitive' } } } },
+      ];
+    }
+
+    const [data, total, inAgg, outAgg] = await Promise.all([
+      prisma.inventoryTransaction.findMany({
+        where,
+        include: {
+          inventory: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  sku: true,
+                  unitType: true,
+                  unitLabel: true,
+                },
+              },
+              branch: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+        skip,
+        take,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.inventoryTransaction.count({ where }),
+      prisma.inventoryTransaction.aggregate({
+        where: { ...where, quantity: { gt: 0 } },
+        _sum: { quantity: true },
+      }),
+      prisma.inventoryTransaction.aggregate({
+        where: { ...where, quantity: { lt: 0 } },
+        _sum: { quantity: true },
+      }),
+    ]);
+
+    const totalIn = inAgg._sum.quantity || 0;
+    const totalOut = Math.abs(outAgg._sum.quantity || 0);
+    const netChange = totalIn - totalOut;
+
+    return {
+      data: data.map((tx) => ({
+        id: tx.id,
+        inventoryId: tx.inventoryId,
+        productId: tx.inventory.product.id,
+        productName: tx.inventory.product.name,
+        productSku: tx.inventory.product.sku,
+        unitLabel: tx.inventory.product.unitLabel,
+        branchId: tx.inventory.branch?.id || null,
+        branchName: tx.inventory.branch?.name || 'N/A',
+        type: tx.type,
+        quantity: tx.quantity,
+        balanceBefore: tx.balanceBefore,
+        balanceAfter: tx.balanceAfter,
+        reference: tx.reference,
+        notes: tx.notes,
+        batchName: tx.batchName,
+        manufactureDate: tx.manufactureDate,
+        expiryDate: tx.expiryDate,
+        sizeName: tx.sizeName,
+        performedBy: tx.performedBy || (tx.type === 'POS_SALE' ? 'Staff' : tx.type === 'SALE' ? 'Online System' : 'Staff'),
+        createdAt: tx.createdAt,
+      })),
+      summary: {
+        totalIn,
+        totalOut,
+        netChange,
+        totalTransactions: total,
+      },
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 }
 

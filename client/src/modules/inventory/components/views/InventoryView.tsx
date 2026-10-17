@@ -10,6 +10,7 @@ import { useListProducts } from '@/modules/products';
 import toast from 'react-hot-toast';
 import { useDashboardLocale } from '@/modules/dashboard/locales/DashboardLocaleContext';
 import { LoadingSpinner } from '@/shared/components/ui/LoadingStates';
+import InventoryLedgerView from './InventoryLedgerView';
 
 interface InventoryViewProps {
   products: any[];
@@ -27,6 +28,8 @@ export default function InventoryView({
   const { data: branches = [] } = useListBranches();
   const activeBranches = branches.filter((b) => b.active);
   const [selectedBranch, setSelectedBranch] = useState('');
+  const [activeTab, setActiveTab] = useState<'current' | 'ledger'>('current');
+  const [ledgerSearch, setLedgerSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [formProductId, setFormProductId] = useState(products[0]?.id.toString() || '1');
   const [formBranchId, setFormBranchId] = useState('');
@@ -331,8 +334,61 @@ export default function InventoryView({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Header with Title and Summary Stats Side by Side */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+      {/* Tab Switcher Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3" style={{ borderColor: Theme.border }}>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('current')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer border ${
+              activeTab === 'current'
+                ? 'bg-foreground text-background border-foreground shadow-xs'
+                : 'bg-white text-muted-foreground border-border hover:bg-gray-50'
+            }`}
+          >
+            <span>📦</span>
+            <span>{t.inventory.tabCurrentStock || 'Current Stock'}</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                activeTab === 'current'
+                  ? 'bg-background/20 text-background'
+                  : 'bg-gray-100 text-gray-700'
+              }`}
+            >
+              {branchProducts.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('ledger')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer border ${
+              activeTab === 'ledger'
+                ? 'bg-foreground text-background border-foreground shadow-xs'
+                : 'bg-white text-muted-foreground border-border hover:bg-gray-50'
+            }`}
+          >
+            <span>📋</span>
+            <span>{t.inventory.tabLedger || 'Stock Ledger'}</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+              Audit Trail
+            </span>
+          </button>
+        </div>
+
+        {activeTab === 'ledger' && (
+          <div className="text-xs text-muted-foreground hidden sm:block">
+            {t.inventory.ledgerSubtitle}
+          </div>
+        )}
+      </div>
+
+      {activeTab === 'ledger' ? (
+        <InventoryLedgerView initialBranchId={selectedBranch} initialSearchQuery={ledgerSearch} />
+      ) : (
+        <>
+          {/* Header with Title and Summary Stats Side by Side */}
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
           <div className="text-[18px] font-semibold" style={{ color: Theme.fg }}>
             {t.inventory.title}
@@ -629,6 +685,7 @@ export default function InventoryView({
                           textAlign: 'right',
                         }}
                       >
+                        <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => {
                             setFormProductId(p.id.toString());
@@ -669,6 +726,24 @@ export default function InventoryView({
                         >
                           {t.inventory.edit}
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLedgerSearch(p.sku || p.name);
+                            setActiveTab('ledger');
+                          }}
+                          className="cursor-pointer rounded border px-2 py-1 text-xs font-medium transition-all hover:bg-gray-100 flex items-center gap-1"
+                          style={{
+                            border: `1px solid ${Theme.border}`,
+                            background: '#fff',
+                            color: Theme.fg,
+                          }}
+                          title={t.inventory.viewProductLedger}
+                        >
+                          <span>📋</span>
+                          <span className="hidden sm:inline">{t.inventory.tabLedger}</span>
+                        </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1117,32 +1192,34 @@ export default function InventoryView({
         </div>
       )}
 
-      {/* Recent Manual Sales */}
-      <Card>
-        <SecHead title={t.inventory.recentManualSales} sub={t.inventory.latestTransactions} />
-        {sellLog.slice(0, 5).map((log: any) => (
-          <div
-            key={log.id}
-            className="flex items-center justify-between border-b px-3 py-3"
-            style={{ borderBottomColor: Theme.border }}
-          >
-            <div>
-              <div className="font-semibold" style={{ color: Theme.fg }}>
-                {log.product}
+        {/* Recent Manual Sales */}
+        <Card>
+          <SecHead title={t.inventory.recentManualSales} sub={t.inventory.latestTransactions} />
+          {sellLog.slice(0, 5).map((log: any) => (
+            <div
+              key={log.id}
+              className="flex items-center justify-between border-b px-3 py-3"
+              style={{ borderBottomColor: Theme.border }}
+            >
+              <div>
+                <div className="font-semibold" style={{ color: Theme.fg }}>
+                  {log.product}
+                </div>
+                <div className="text-xs" style={{ color: Theme.mutedFg }}>
+                  {log.date}
+                </div>
               </div>
-              <div className="text-xs" style={{ color: Theme.mutedFg }}>
-                {log.date}
+              <div className="text-right">
+                <div className="font-semibold">{log.qty} {t.inventory.units}</div>
+                <div className="text-xs" style={{ color: Theme.mutedFg }}>
+                  ৳{log.amount}
+                </div>
               </div>
             </div>
-            <div className="text-right">
-              <div className="font-semibold">{log.qty} {t.inventory.units}</div>
-              <div className="text-xs" style={{ color: Theme.mutedFg }}>
-                ৳{log.amount}
-              </div>
-            </div>
-          </div>
-        ))}
-      </Card>
-    </div>
-  );
+          ))}
+        </Card>
+      </>
+    )}
+  </div>
+);
 }

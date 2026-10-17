@@ -1,5 +1,5 @@
 import { useQuery, UseQueryResult } from '@tanstack/react-query';
-import { inventoryAPI, type InventorySummaryParams } from './api';
+import { inventoryAPI, type InventorySummaryParams, type InventoryLedgerParams, type InventoryLedgerResponse } from './api';
 
 export const INVENTORY_QUERY_KEYS = {
   all: ['inventory'] as const,
@@ -11,6 +11,7 @@ export const INVENTORY_QUERY_KEYS = {
   lowStock: () => [...INVENTORY_QUERY_KEYS.all, 'lowStock'] as const,
   history: (productId: number) => [...INVENTORY_QUERY_KEYS.all, 'history', productId] as const,
   reports: () => [...INVENTORY_QUERY_KEYS.all, 'reports'] as const,
+  ledger: (params?: InventoryLedgerParams) => [...INVENTORY_QUERY_KEYS.all, 'ledger', params] as const,
 };
 
 export const useInventorySummary = (params?: InventorySummaryParams, options?: any) => {
@@ -71,6 +72,15 @@ export const useInventoryReports = (
     queryKey: [...INVENTORY_QUERY_KEYS.reports(), params],
     queryFn: () => inventoryAPI.getInventoryReports(params),
     staleTime: 10 * 60 * 1000, // 10 minutes
+    ...options,
+  });
+};
+
+export const useInventoryLedger = (params?: InventoryLedgerParams, options?: any) => {
+  return useQuery<InventoryLedgerResponse>({
+    queryKey: INVENTORY_QUERY_KEYS.ledger(params),
+    queryFn: () => inventoryAPI.getInventoryLedger(params),
+    staleTime: 60 * 1000, // 1 minute
     ...options,
   });
 };

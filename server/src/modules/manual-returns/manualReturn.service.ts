@@ -105,17 +105,26 @@ export class ManualReturnService {
           data: { quantity: { increment: returnedQty } },
         });
 
-        await tx.inventoryTransaction.create({
-          data: {
-            inventoryId: inventory.id,
-            type: 'RETURN',
-            quantity: returnedQty,
-            balanceBefore: beforeQty,
-            balanceAfter: afterQty,
-            reference: returnNumber,
-            notes: `Manual return recorded (${returnNumber})`,
-          },
-        });
+        const productItems = lineItems.filter((i) => i.productId === productId);
+        let runningBalance = beforeQty;
+        for (const pItem of productItems) {
+          const itemBefore = runningBalance;
+          const itemAfter = itemBefore + pItem.quantity;
+          runningBalance = itemAfter;
+          await tx.inventoryTransaction.create({
+            data: {
+              inventoryId: inventory.id,
+              type: 'RETURN',
+              quantity: pItem.quantity,
+              balanceBefore: itemBefore,
+              balanceAfter: itemAfter,
+              reference: returnNumber,
+              notes: `Manual return recorded (${returnNumber})`,
+              sizeName: pItem.sizeName || null,
+              performedBy: data.returnedBy || 'Staff',
+            },
+          });
+        }
       }
 
       // Increment size quantity for items returned with a specific size

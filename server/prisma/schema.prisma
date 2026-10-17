@@ -557,6 +557,7 @@ model InventoryTransaction {
   manufactureDate DateTime?
   expiryDate  DateTime?
   sizeName    String?    // Snapshot of size for this transaction
+  performedBy String?    // User / staff who made the change
   createdAt   DateTime                  @default(now())
 
   @@index([inventoryId])

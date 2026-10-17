@@ -164,17 +164,26 @@ export class ManualSaleService {
           data: { quantity: { decrement: requestedQty } },
         });
 
-        await tx.inventoryTransaction.create({
-          data: {
-            inventoryId: inventory.id,
-            type: 'POS_SALE',
-            quantity: -requestedQty,
-            balanceBefore: beforeQty,
-            balanceAfter: afterQty,
-            reference: saleNumber,
-            notes: `Manual sale recorded (${saleNumber})`,
-          },
-        });
+        const productItems = lineItems.filter((i) => i.productId === productId);
+        let runningBalance = beforeQty;
+        for (const pItem of productItems) {
+          const itemBefore = runningBalance;
+          const itemAfter = itemBefore - pItem.quantity;
+          runningBalance = itemAfter;
+          await tx.inventoryTransaction.create({
+            data: {
+              inventoryId: inventory.id,
+              type: 'POS_SALE',
+              quantity: -pItem.quantity,
+              balanceBefore: itemBefore,
+              balanceAfter: itemAfter,
+              reference: saleNumber,
+              notes: `Manual sale recorded (${saleNumber})`,
+              sizeName: pItem.sizeName || null,
+              performedBy: data.soldBy || 'Staff',
+            },
+          });
+        }
       }
 
       // Validate and decrement size quantity for items sold with a specific size
