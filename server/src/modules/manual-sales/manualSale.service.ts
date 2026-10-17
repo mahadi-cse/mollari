@@ -114,6 +114,18 @@ export class ManualSaleService {
       const sequence = String(dailyCount + 1).padStart(4, '0');
       const saleNumber = `${branchCode}-${dateStr}-${sequence}`;
 
+      let resolvedSoldBy = data.soldBy || 'Staff';
+      if (resolvedSoldBy.includes('@')) {
+        const u = await tx.user.findUnique({
+          where: { email: resolvedSoldBy.toLowerCase().trim() },
+          select: { firstName: true, lastName: true },
+        });
+        if (u) {
+          const fullName = `${u.firstName || ''} ${u.lastName || ''}`.trim();
+          if (fullName) resolvedSoldBy = fullName;
+        }
+      }
+
       const sale = await tx.manualSale.create({
         data: {
           saleNumber,
@@ -122,7 +134,7 @@ export class ManualSaleService {
           branchId: data.branchId,
           branchName: data.branchName,
           note: data.note,
-          soldBy: data.soldBy || 'Staff',
+          soldBy: resolvedSoldBy,
           items: {
             create: lineItems.map((item) => ({
               productId: item.productId,
@@ -180,7 +192,7 @@ export class ManualSaleService {
               reference: saleNumber,
               notes: `Manual sale recorded (${saleNumber})`,
               sizeName: pItem.sizeName || null,
-              performedBy: data.soldBy || 'Staff',
+              performedBy: resolvedSoldBy,
             },
           });
         }

@@ -590,6 +590,59 @@ export class InventoryService {
     const totalOut = Math.abs(outAgg._sum.quantity || 0);
     const netChange = totalIn - totalOut;
 
+    const emailsToResolve = Array.from(
+      new Set(
+        data
+          .map((tx) => tx.performedBy)
+          .filter((val): val is string => Boolean(val && val.includes('@')))
+      )
+    );
+
+    const userMap = new Map<string, string>();
+    if (emailsToResolve.length > 0) {
+      const users = await prisma.user.findMany({
+        where: { email: { in: emailsToResolve } },
+        select: { email: true, firstName: true, lastName: true },
+      });
+      for (const u of users) {
+        const fullName = `${u.firstName || ''} ${u.lastName || ''}`.trim();
+        if (fullName) {
+          userMap.set(u.email.toLowerCase(), fullName);
+        }
+      }
+    }
+
+    const posSaleReferences = data
+      .filter((tx) => tx.type === 'POS_SALE' && tx.reference)
+      .map((tx) => tx.reference!);
+
+    const manualSales = posSaleReferences.length > 0
+      ? await prisma.manualSale.findMany({
+          where: { saleNumber: { in: posSaleReferences } },
+          select: { saleNumber: true, soldBy: true },
+        })
+      : [];
+
+    const saleSoldByMap = new Map(manualSales.map((s) => [s.saleNumber, s.soldBy]));
+
+    const resolvePerformedBy = (tx: (typeof data)[0]) => {
+      if (tx.type === 'POS_SALE' && tx.reference && saleSoldByMap.has(tx.reference)) {
+        const soldBy = saleSoldByMap.get(tx.reference);
+        if (soldBy && soldBy !== 'System Admin' && soldBy !== 'Staff') {
+          return soldBy;
+        }
+      }
+
+      if (!tx.performedBy || tx.performedBy === 'System Admin') {
+        return 'Mahadi Hasan';
+      }
+      const lower = tx.performedBy.toLowerCase();
+      if (userMap.has(lower)) {
+        return userMap.get(lower)!;
+      }
+      return tx.performedBy;
+    };
+
     return {
       data: data.map((tx) => ({
         id: tx.id,
@@ -610,7 +663,7 @@ export class InventoryService {
         manufactureDate: tx.manufactureDate,
         expiryDate: tx.expiryDate,
         sizeName: tx.sizeName,
-        performedBy: tx.performedBy || (tx.type === 'POS_SALE' ? 'Staff' : tx.type === 'SALE' ? 'Online System' : 'Staff'),
+        performedBy: resolvePerformedBy(tx),
         createdAt: tx.createdAt,
       })),
       summary: {

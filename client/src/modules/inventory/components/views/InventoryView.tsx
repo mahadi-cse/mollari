@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 import { useDashboardLocale } from '@/modules/dashboard/locales/DashboardLocaleContext';
 import { LoadingSpinner } from '@/shared/components/ui/LoadingStates';
 import InventoryLedgerView from './InventoryLedgerView';
+import { History } from 'lucide-react';
 
 interface InventoryViewProps {
   products: any[];
@@ -334,51 +335,95 @@ export default function InventoryView({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Tab Switcher Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3" style={{ borderColor: Theme.border }}>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveTab('current')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer border ${
-              activeTab === 'current'
-                ? 'bg-foreground text-background border-foreground shadow-xs'
-                : 'bg-white text-muted-foreground border-border hover:bg-gray-50'
-            }`}
-          >
-            <span>📦</span>
-            <span>{t.inventory.tabCurrentStock || 'Current Stock'}</span>
-            <span
-              className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
-                activeTab === 'current'
-                  ? 'bg-background/20 text-background'
-                  : 'bg-gray-100 text-gray-700'
-              }`}
-            >
-              {branchProducts.length}
-            </span>
-          </button>
+      {/* Unified Compact Header: Title, Segmented Tabs & Summary Stats */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+        {/* Left: Title + Segmented Tabs (locked in place) */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
+          <div className="shrink-0">
+            <div className="text-[18px] font-semibold" style={{ color: Theme.fg }}>
+              {t.inventory.title}
+            </div>
+            <div className="mt-0.5 text-[12px]" style={{ color: Theme.mutedFg }}>
+              {(selectedBranch
+                ? branches.find((b) => b.id === Number(selectedBranch))?.name
+                : t.inventory.allBranches) || t.na}{' '}
+              · {t.inventory.synced}
+            </div>
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('ledger')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer border ${
-              activeTab === 'ledger'
-                ? 'bg-foreground text-background border-foreground shadow-xs'
-                : 'bg-white text-muted-foreground border-border hover:bg-gray-50'
-            }`}
+          {/* Compact E-Commerce Style Segmented Tabs */}
+          <div
+            className="inline-flex items-center gap-1 overflow-hidden rounded-xl p-1 shrink-0"
+            style={{ background: Theme.muted, border: `1px solid ${Theme.border}` }}
           >
-            <span>📋</span>
-            <span>{t.inventory.tabLedger || 'Stock Ledger'}</span>
-            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
-              Audit Trail
-            </span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('current')}
+              className="cursor-pointer whitespace-nowrap rounded-lg border-none px-3.5 py-1.5 text-[13px] font-bold capitalize transition-all duration-150 flex items-center gap-2"
+              style={{
+                background: activeTab === 'current' ? '#fff' : 'transparent',
+                color: activeTab === 'current' ? Theme.primary : Theme.mutedFg,
+                boxShadow: activeTab === 'current' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
+              }}
+            >
+              <span>{t.inventory.tabCurrentStock || 'Current Stock'}</span>
+              <span
+                className="text-[11px] px-1.5 py-0.2 rounded-full font-semibold"
+                style={{
+                  background: activeTab === 'current' ? 'rgba(240, 17, 114, 0.1)' : 'rgba(0, 0, 0, 0.05)',
+                  color: activeTab === 'current' ? Theme.primary : Theme.mutedFg,
+                }}
+              >
+                {branchProducts.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('ledger')}
+              className="cursor-pointer whitespace-nowrap rounded-lg border-none px-3.5 py-1.5 text-[13px] font-bold capitalize transition-all duration-150 flex items-center gap-2"
+              style={{
+                background: activeTab === 'ledger' ? '#fff' : 'transparent',
+                color: activeTab === 'ledger' ? Theme.primary : Theme.mutedFg,
+                boxShadow: activeTab === 'ledger' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
+              }}
+            >
+              <span>{t.inventory.tabLedger || 'Stock Ledger'}</span>
+              <span
+                className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+                style={{
+                  background: activeTab === 'ledger' ? '#dcfce7' : 'rgba(0, 0, 0, 0.05)',
+                  color: activeTab === 'ledger' ? '#166534' : Theme.mutedFg,
+                }}
+              >
+                Audit Trail
+              </span>
+            </button>
+          </div>
         </div>
 
-        {activeTab === 'ledger' && (
-          <div className="text-xs text-muted-foreground hidden sm:block">
-            {t.inventory.ledgerSubtitle}
+        {/* Right: Summary Stats (when in Current Stock) */}
+        {activeTab === 'current' && (
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2">
+            {[
+              { label: t.inventory.totalSkus, val: summaryStats.totalSkus, color: '' },
+              { label: t.inventory.totalUnits, val: summaryStats.totalUnits, color: '' },
+              { label: t.inventory.lowStock, val: summaryStats.lowStockCount, color: '#854F0B' },
+              { label: t.inventory.outOfStock, val: summaryStats.outOfStockCount, color: '#A32D2D' },
+            ].map((stat, i) => (
+              <div
+                key={i}
+                className="rounded-lg px-2.5 py-1.5 text-center sm:text-left"
+                style={{ background: Theme.muted }}
+              >
+                <div className="text-[11px] leading-tight" style={{ color: Theme.mutedFg }}>
+                  {stat.label}
+                </div>
+                <div className="text-base font-semibold leading-tight" style={{ color: stat.color || Theme.fg }}>
+                  {stat.val}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -387,43 +432,6 @@ export default function InventoryView({
         <InventoryLedgerView initialBranchId={selectedBranch} initialSearchQuery={ledgerSearch} />
       ) : (
         <>
-          {/* Header with Title and Summary Stats Side by Side */}
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-        <div>
-          <div className="text-[18px] font-semibold" style={{ color: Theme.fg }}>
-            {t.inventory.title}
-          </div>
-          <div className="mt-1 text-[13px]" style={{ color: Theme.mutedFg }}>
-            {(selectedBranch
-              ? branches.find((b) => b.id === Number(selectedBranch))?.name
-              : t.inventory.allBranches) || t.na}{' '}
-            · {t.inventory.synced}
-          </div>
-        </div>
-
-        {/* Summary Stats */}
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4 2xl:gap-3 w-full lg:w-auto">
-          {[
-            { label: t.inventory.totalSkus, val: summaryStats.totalSkus, color: '' },
-            { label: t.inventory.totalUnits, val: summaryStats.totalUnits, color: '' },
-            { label: t.inventory.lowStock, val: summaryStats.lowStockCount, color: '#854F0B' },
-            { label: t.inventory.outOfStock, val: summaryStats.outOfStockCount, color: '#A32D2D' },
-          ].map((stat, i) => (
-            <div
-              key={i}
-              className="rounded-lg px-3 py-2"
-              style={{ background: Theme.muted }}
-            >
-              <div className="text-xs" style={{ color: Theme.mutedFg }}>
-                {stat.label}
-              </div>
-              <div className="mt-1 text-lg font-semibold" style={{ color: stat.color || Theme.fg }}>
-                {stat.val}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
 
       <Card>
         {/* Toolbar */}
@@ -740,7 +748,7 @@ export default function InventoryView({
                           }}
                           title={t.inventory.viewProductLedger}
                         >
-                          <span>📋</span>
+                          <History className="w-3.5 h-3.5 text-neutral-500" />
                           <span className="hidden sm:inline">{t.inventory.tabLedger}</span>
                         </button>
                         </div>

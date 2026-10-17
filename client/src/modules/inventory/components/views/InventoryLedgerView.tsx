@@ -20,6 +20,20 @@ interface InventoryLedgerViewProps {
   initialSearchQuery?: string;
 }
 
+const formatUserName = (val?: string | null, type?: string) => {
+  if (!val || val === 'System Admin') {
+    return 'Mahadi Hasan';
+  }
+  if (val.includes('@')) {
+    const [namePart] = val.split('@');
+    if (namePart.toLowerCase() === 'admin') return 'Mahadi Hasan';
+    return namePart
+      .replace(/[._-]/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+  return val;
+};
+
 export default function InventoryLedgerView({ initialBranchId, initialSearchQuery }: InventoryLedgerViewProps) {
   const { isMobile } = useResponsive();
   const { t } = useDashboardLocale();
@@ -172,7 +186,7 @@ export default function InventoryLedgerView({ initialBranchId, initialSearchQuer
         item.quantity,
         item.balanceBefore,
         item.balanceAfter,
-        `"${(item.performedBy || 'Staff').replace(/"/g, '""')}"`,
+        `"${formatUserName(item.performedBy, item.type).replace(/"/g, '""')}"`,
       ]);
 
       const csvContent =
@@ -889,9 +903,9 @@ export default function InventoryLedgerView({ initialBranchId, initialSearchQuer
                           </span>
                           <span
                             className="font-semibold text-foreground text-[12px] truncate max-w-[160px]"
-                            title={item.performedBy || 'Staff'}
+                            title={formatUserName(item.performedBy, item.type)}
                           >
-                            {item.performedBy || (item.type === 'POS_SALE' ? 'Staff' : item.type === 'SALE' ? 'Online System' : 'Staff')}
+                            {formatUserName(item.performedBy, item.type)}
                           </span>
                         </div>
                       </td>
