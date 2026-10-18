@@ -4,7 +4,7 @@ import 'dotenv/config';
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().default(4000),
-  CLIENT_URL: z.string(),
+  CLIENT_URL: z.string().default('http://localhost:3000'),
   CLIENT_URL_EXTRA: z.string().optional(), // comma-separated extra allowed origins
   
   // Database
@@ -27,13 +27,13 @@ const envSchema = z.object({
   KEYCLOAK_CLIENT_SECRET: z.string().optional(),
   
   // SSLCommerz
-  SSLCOMMERZ_STORE_ID: z.string(),
-  SSLCOMMERZ_STORE_PASSWD: z.string(),
+  SSLCOMMERZ_STORE_ID: z.string().default('testbox'),
+  SSLCOMMERZ_STORE_PASSWD: z.string().default('qwerty'),
   SSLCOMMERZ_IS_LIVE: z.string().transform(v => v === 'true').default('false'),
-  SSLCOMMERZ_SUCCESS_URL: z.string().url(),
-  SSLCOMMERZ_FAIL_URL: z.string().url(),
-  SSLCOMMERZ_CANCEL_URL: z.string().url(),
-  SSLCOMMERZ_IPN_URL: z.string().url(),
+  SSLCOMMERZ_SUCCESS_URL: z.string().url().default('http://localhost:4000/api/payments/sslcommerz/success'),
+  SSLCOMMERZ_FAIL_URL: z.string().url().default('http://localhost:4000/api/payments/sslcommerz/fail'),
+  SSLCOMMERZ_CANCEL_URL: z.string().url().default('http://localhost:4000/api/payments/sslcommerz/cancel'),
+  SSLCOMMERZ_IPN_URL: z.string().url().default('http://localhost:4000/api/payments/sslcommerz/ipn'),
   
   // File uploads
   UPLOAD_DIR: z.string().default('uploads'),

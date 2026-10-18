@@ -1,19 +1,10 @@
 {
   "version": 2,
   "regions": ["sin1"],
-  "builds": [
+  "rewrites": [
     {
-      "src": "src/vercel.ts",
-      "use": "@vercel/node",
-      "config": {
-        "nodeVersion": "22.x"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "src/vercel.ts"
+      "source": "/(.*)",
+      "destination": "/api"
     }
   ]
 }

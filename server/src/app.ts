@@ -49,8 +49,17 @@ export function createApp(): Express {
   app.use(requestLogger);
   app.use(generalLimiter);
 
-  // Health check
+  // Root and Health check endpoints
+  app.get('/', (req, res) => {
+    res.json({ status: 'OK', message: 'Mollari Backend API is running', timestamp: new Date().toISOString() });
+  });
+  app.get('/api', (req, res) => {
+    res.json({ status: 'OK', message: 'Mollari Backend API is running', timestamp: new Date().toISOString() });
+  });
   app.get('/health', (req, res) => {
+    res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  });
+  app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
   });
 

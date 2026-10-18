@@ -16,7 +16,7 @@ export const prisma =
     },
   });
 
-if (process.env.NODE_ENV !== 'production') {
+if (process.env.NODE_ENV !== 'production' || process.env.VERCEL) {
   globalForPrisma.prisma = prisma;
 }
 
