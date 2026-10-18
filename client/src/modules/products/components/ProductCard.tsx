@@ -50,6 +50,29 @@ export function ProductCard({ product }: { product: Product }) {
           <span className="text-[11px] text-zinc-500">(0)</span>
         </div>
 
+        {product.colors && product.colors.length > 0 && (
+          <div className="flex items-center gap-1.5 pt-0.5">
+            <div className="flex items-center -space-x-1">
+              {product.colors.slice(0, 4).map((c, i) => (
+                <span
+                  key={c.id || i}
+                  className="h-3.5 w-3.5 rounded-full border border-white shadow-xs inline-block"
+                  style={{ backgroundColor: c.hexCode || '#9ca3af' }}
+                  title={c.name}
+                />
+              ))}
+            </div>
+            {product.colors.length > 4 && (
+              <span className="text-[10px] text-zinc-500 font-medium">
+                +{product.colors.length - 4}
+              </span>
+            )}
+            <span className="text-[10px] text-zinc-400">
+              {product.colors.length} {product.colors.length === 1 ? 'color' : 'colors'}
+            </span>
+          </div>
+        )}
+
         <div className="flex items-baseline gap-2">
           <span className="text-lg font-extrabold text-primary">৳{Number(product.price).toLocaleString()}</span>
           {product.compareAtPrice ? (

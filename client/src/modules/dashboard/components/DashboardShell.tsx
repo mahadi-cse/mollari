@@ -304,24 +304,64 @@ export default function DashboardShell({
           <ManualSaleModal
             products={products}
             onClose={() => setModal(false)}
-            onConfirm={async (product: Product, qty: number, note: string, total: number) => {
+            onConfirm={async (
+              product: Product,
+              qty: number,
+              note: string,
+              total: number,
+              variant?: { colorName?: string; sizeName?: string }
+            ) => {
               setProducts(
                 products.map((p: Product) => {
                   if (p.id !== product.id) return p;
-                  const ns = p.stock - qty;
+                  const ns = Math.max(0, p.stock - qty);
+
+                  let updatedColors = p.colors;
+                  let updatedSizes = p.sizes;
+                  if (variant?.colorName && updatedColors) {
+                    updatedColors = updatedColors.map((c: any) => {
+                      if (c.name !== variant.colorName) return c;
+                      if (variant.sizeName && c.sizes) {
+                        const nextSizes = c.sizes.map((s: any) =>
+                          s.name === variant.sizeName
+                            ? { ...s, quantity: Math.max(0, (Number(s.quantity) || 0) - qty) }
+                            : s
+                        );
+                        return {
+                          ...c,
+                          sizes: nextSizes,
+                          quantity: nextSizes.reduce((sum: number, s: any) => sum + (Number(s.quantity) || 0), 0),
+                        };
+                      }
+                      return { ...c, quantity: Math.max(0, (Number(c.quantity) || 0) - qty) };
+                    });
+                  } else if (variant?.sizeName && updatedSizes) {
+                    updatedSizes = updatedSizes.map((s: any) =>
+                      s.name === variant.sizeName
+                        ? { ...s, quantity: Math.max(0, (Number(s.quantity) || 0) - qty) }
+                        : s
+                    );
+                  }
+
                   return {
                     ...p,
                     stock: ns,
+                    colors: updatedColors,
+                    sizes: updatedSizes,
                     manualSold: p.manualSold + qty,
                     sold: p.sold + qty,
                     status: ns === 0 ? 'out' : ns < 15 ? 'low' : 'active',
                   };
                 })
               );
+
+              const variantLabel = [variant?.colorName, variant?.sizeName].filter(Boolean).join(' / ');
+              const displayProductName = variantLabel ? `${product.name} (${variantLabel})` : product.name;
+
               setSellLog([
                 {
                   id: `MS-${String(sellLog.length + 1).padStart(3, '0')}`,
-                  product: product.name,
+                  product: displayProductName,
                   qty,
                   amount: total,
                   note: note || t.walkInSale,
@@ -330,11 +370,19 @@ export default function DashboardShell({
                 },
                 ...sellLog,
               ]);
-              setToast(`✓ ${t.sold} ${qty} × ${product.name}`);
+              setToast(`✓ ${t.sold} ${qty} × ${displayProductName}`);
 
               try {
                 await createSaleMutation.mutateAsync({
-                  items: [{ productId: product.id, quantity: qty, unitPrice: total / qty }],
+                  items: [
+                    {
+                      productId: product.id,
+                      quantity: qty,
+                      unitPrice: total / qty,
+                      colorName: variant?.colorName,
+                      sizeName: variant?.sizeName,
+                    },
+                  ],
                   branchId: (product as any).branchId ?? (product as any).inventories?.[0]?.warehouseId,
                   branchName: (product as any).branch ?? '',
                   note: note || undefined,

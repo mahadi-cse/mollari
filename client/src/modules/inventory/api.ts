@@ -21,7 +21,9 @@ export interface AdjustStockRequest {
   manufactureDate?: string;
   expiryDate?: string;
   sizeName?: string;
+  colorName?: string;
   sizes?: Array<{ name: string; quantity: number }>;
+  colors?: Array<{ name: string; quantity: number }>;
 }
 
 export interface TransferStockRequest {
@@ -51,6 +53,7 @@ export interface InventoryLedgerEntry {
   manufactureDate?: string | null;
   expiryDate?: string | null;
   sizeName?: string | null;
+  colorName?: string | null;
   performedBy?: string | null;
   createdAt: string;
 }

@@ -39,6 +39,7 @@ export default function ProductDetailView({ slug: propSlug }: { slug?: string })
   const [quantity, setQuantity] = useState(1);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [selectedSizeIndex, setSelectedSizeIndex] = useState(0);
+  const [selectedColorIndex, setSelectedColorIndex] = useState(0);
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
   const [activeTab, setActiveTab] = useState<TabType>('description');
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
@@ -74,14 +75,38 @@ export default function ProductDetailView({ slug: propSlug }: { slug?: string })
     return product.images;
   }, [product]);
 
-  // Size & Unit support
-  const sizes = useMemo(() => (product?.sizes || []).filter((s: any) => s.isActive !== false), [product]);
+  // Color support
+  const colors = useMemo(() => (product?.colors || []).filter((c: any) => c.isActive !== false), [product]);
+  const hasColors = colors.length > 0;
+  const selectedColor = hasColors ? colors[selectedColorIndex] || colors[0] : null;
+
+  // Size & Unit support (if product has colors, sizes belong to the selected color)
+  const sizes = useMemo(() => {
+    if (hasColors && selectedColor) {
+      if (selectedColor.sizes && selectedColor.sizes.length > 0) {
+        return selectedColor.sizes.filter((s: any) => s.isActive !== false);
+      }
+      return [];
+    }
+    return (product?.sizes || []).filter((s: any) => s.isActive !== false);
+  }, [hasColors, selectedColor, product]);
+
   const hasSizes = sizes.length > 0;
   const selectedSize = hasSizes ? sizes[selectedSizeIndex] || sizes[0] : null;
   const unitType = product?.unitType || 'PIECE';
   const unitLabel = product?.unitLabel || 'pc';
 
-  const displayImages = images;
+  useEffect(() => {
+    setSelectedSizeIndex(0);
+  }, [selectedColorIndex]);
+
+  const displayImages = useMemo(() => {
+    let list = [...images];
+    if (selectedColor?.imageUrl && !list.includes(selectedColor.imageUrl)) {
+      list = [selectedColor.imageUrl, ...list];
+    }
+    return list;
+  }, [images, selectedColor]);
 
   // Unused mock arrays removed
 
@@ -92,11 +117,23 @@ export default function ProductDetailView({ slug: propSlug }: { slug?: string })
   }, [slug]);
 
   const availableStock = useMemo(() => {
-    return (product?.inventories || []).reduce((total, inventory) => {
+    if (!product) return 0;
+    if (hasColors && selectedColor) {
+      if (hasSizes && selectedSize) {
+        return Number(selectedSize.quantity) || 0;
+      }
+      if (selectedColor.quantity !== undefined && selectedColor.quantity !== null) {
+        return Number(selectedColor.quantity) || 0;
+      }
+    } else if (hasSizes && selectedSize) {
+      return Number(selectedSize.quantity) || 0;
+    }
+
+    return (product?.inventories || []).reduce((total: number, inventory: any) => {
       const available = Math.max(0, (inventory.quantity || 0) - (inventory.reservedQty || 0));
       return total + available;
     }, 0);
-  }, [product]);
+  }, [product, hasColors, selectedColor, hasSizes, selectedSize]);
 
   const maxAllowedQuantity = useMemo(() => {
     if (availableStock <= 0) return 0;
@@ -113,7 +150,16 @@ export default function ProductDetailView({ slug: propSlug }: { slug?: string })
   const safeQuantity = inStock ? Math.min(Math.max(1, quantity), maxAllowedQuantity || 1) : 1;
 
   const basePrice = Number(product?.price || 0);
-  const price = selectedSize?.priceOverride ? Number(selectedSize.priceOverride) : basePrice;
+  const price = useMemo(() => {
+    if (hasSizes && selectedSize?.priceOverride) {
+      return Number(selectedSize.priceOverride);
+    }
+    if (hasColors && selectedColor?.priceOverride) {
+      return Number(selectedColor.priceOverride);
+    }
+    return basePrice;
+  }, [basePrice, hasSizes, selectedSize, hasColors, selectedColor]);
+
   const compareAtPrice = Number(product?.compareAtPrice || 0);
   const hasDiscount = compareAtPrice > price;
   const savings = hasDiscount ? compareAtPrice - price : 0;
@@ -151,7 +197,8 @@ export default function ProductDetailView({ slug: propSlug }: { slug?: string })
       return;
     }
     const sizeParam = selectedSize ? `&size=${encodeURIComponent(selectedSize.name)}` : '';
-    const targetCheckoutUrl = `/checkout?slug=${product!.slug}&qty=${safeQuantity}${sizeParam}`;
+    const colorParam = selectedColor ? `&color=${encodeURIComponent(selectedColor.name)}` : '';
+    const targetCheckoutUrl = `/checkout?slug=${product!.slug}&qty=${safeQuantity}${sizeParam}${colorParam}`;
 
     if (status === 'unauthenticated') {
       toast.error('Please login to place an order');
@@ -547,6 +594,71 @@ export default function ProductDetailView({ slug: propSlug }: { slug?: string })
               <span style={{ fontSize: 12, color: GRAY_LIGHT }}>({unitLabel})</span>
             </div>
 
+            {/* Color Selector */}
+            {hasColors && (
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: DARK, marginBottom: 8 }}>
+                  Select Color: <span style={{ fontWeight: 800, color: PINK }}>{selectedColor?.name}</span>
+                </p>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {colors.map((color: any, i: number) => {
+                    const isSelected = selectedColorIndex === i;
+                    return (
+                      <button
+                        key={color.id || color.name}
+                        type="button"
+                        onClick={() => {
+                          setSelectedColorIndex(i);
+                          setActiveImageIndex(0);
+                        }}
+                        style={{
+                          padding: '6px 14px',
+                          borderRadius: 12,
+                          border: `1.5px solid ${isSelected ? PINK : PINK_LIGHT}`,
+                          background: isSelected ? PINK_PALE : '#fff',
+                          color: isSelected ? PINK : DARK,
+                          fontSize: 13,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          boxShadow: isSelected ? '0 2px 8px rgba(240, 17, 114, 0.15)' : 'none',
+                        }}
+                      >
+                        {color.imageUrl ? (
+                          <img
+                            src={color.imageUrl}
+                            alt={color.name}
+                            style={{
+                              width: 22,
+                              height: 22,
+                              borderRadius: 6,
+                              objectFit: 'cover',
+                              border: `1px solid ${isSelected ? PINK : '#e5e7eb'}`,
+                            }}
+                          />
+                        ) : color.hexCode ? (
+                          <span
+                            style={{
+                              width: 16,
+                              height: 16,
+                              borderRadius: '50%',
+                              backgroundColor: color.hexCode,
+                              border: '1.5px solid rgba(0,0,0,0.15)',
+                              display: 'inline-block',
+                            }}
+                          />
+                        ) : null}
+                        <span>{color.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Size Selector */}
             {hasSizes && (
               <div>
@@ -812,7 +924,7 @@ function ReviewSection({ productId, status }: { productId: number; status: strin
           <p style={{ fontSize: 14, color: GRAY_LIGHT, textAlign: 'center' }}>No reviews yet. Be the first to share your experience!</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            {reviews.map((review, i) => {
+            {reviews.map((review: any, i: number) => {
               const name = [review.customer.firstName, review.customer.lastName].filter(Boolean).join(' ') || 'Customer';
               const date = new Date(review.createdAt).toLocaleDateString('en-BD', { year: 'numeric', month: 'long' });
               return (

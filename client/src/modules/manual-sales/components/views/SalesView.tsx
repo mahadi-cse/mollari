@@ -32,7 +32,19 @@ interface SaleLineItem {
   unitType: 'PIECE' | 'WEIGHT';
   unitLabel: string;
   sizeName: string;
+  colorName: string;
+  colorHex?: string | null;
   sizes: Array<{ name: string; quantity?: number; imageUrl?: string | null; priceOverride?: number | null; costPriceOverride?: number | null; isActive?: boolean }>;
+  colors: Array<{
+    name: string;
+    hexCode?: string | null;
+    imageUrl?: string | null;
+    quantity?: number;
+    priceOverride?: number | null;
+    costPriceOverride?: number | null;
+    isActive?: boolean;
+    sizes?: Array<{ name: string; quantity?: number; imageUrl?: string | null; priceOverride?: number | null; costPriceOverride?: number | null; isActive?: boolean }>;
+  }>;
 }
 
 const SALES_BRANCH_STORAGE_KEY = 'dashboard.sales.selectedBranchId';
@@ -59,6 +71,7 @@ export default function SalesView({
   const [lastRecordedSale, setLastRecordedSale] = useState<any>(null);
   const [showPrintToast, setShowPrintToast] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [viewSaleModal, setViewSaleModal] = useState<any | null>(null);
 
   useEffect(() => {
     if (showPrintToast) {
@@ -83,7 +96,11 @@ export default function SalesView({
       <tr>
         <td style="padding: 4px 0; font-size: 11px; font-family: monospace; line-height: 1.2;">
           ${item.productNameSnapshot}
-          ${item.sizeName ? `<span style="font-size: 9px; display: block; color: #555;">Size: ${item.sizeName}</span>` : ''}
+          ${(item.colorName || item.sizeName) ? `
+            <span style="font-size: 9px; display: block; color: #555;">
+              ${[item.colorName && `Color: ${item.colorName}`, item.sizeName && `Size: ${item.sizeName}`].filter(Boolean).join(' | ')}
+            </span>
+          ` : ''}
         </td>
         <td style="padding: 4px 0; text-align: center; font-size: 11px; font-family: monospace;">${item.quantity}</td>
         <td style="padding: 4px 0; text-align: right; font-size: 11px; font-family: monospace;">৳${item.unitPrice}</td>
@@ -362,6 +379,7 @@ export default function SalesView({
     unitType: item.product?.unitType || 'PIECE',
     unitLabel: item.product?.unitLabel || 'pc',
     sizes: (item.product?.sizes || []).filter((s: any) => s.isActive !== false),
+    colors: (item.product?.colors || []).filter((c: any) => c.isActive !== false),
   }));
 
   const getProductMeta = (productId: number) => {
@@ -372,6 +390,7 @@ export default function SalesView({
       ...meta,
       ...liveInv,
       sizes: (liveInv.sizes && liveInv.sizes.length > 0) ? liveInv.sizes : (meta?.sizes || []),
+      colors: (liveInv.colors && liveInv.colors.length > 0) ? liveInv.colors : (meta?.colors || []),
     };
   };
 
@@ -383,24 +402,44 @@ export default function SalesView({
   const getMaxEditableQty = (productId: number, rowIndex: number) => {
     const item = lineItems[rowIndex];
     const product = searchableProducts.find((p) => p.id === productId);
-    if (!product) return 1;
+    if (!product || !item) return 1;
 
-    if (item && item.sizeName && item.sizes && item.sizes.length > 0) {
+    let variantStock = product.stock;
+    const meta = getProductMeta(productId) as any;
+    const colors = (meta?.colors || product.colors || []).filter((c: any) => c.isActive !== false);
+
+    if (item.colorName) {
+      const matchedColor = colors.find((c: any) => c.name === item.colorName);
+      if (matchedColor) {
+        if (item.sizeName && matchedColor.sizes && matchedColor.sizes.length > 0) {
+          const matchedSize = matchedColor.sizes.find((s: any) => s.name === item.sizeName);
+          if (matchedSize && matchedSize.quantity !== undefined) {
+            variantStock = Number(matchedSize.quantity);
+          }
+        } else if (matchedColor.quantity !== undefined) {
+          variantStock = Number(matchedColor.quantity);
+        }
+      }
+    } else if (item.sizeName && item.sizes && item.sizes.length > 0) {
       const matchedSize = item.sizes.find((s: any) => s.name === item.sizeName);
       if (matchedSize && matchedSize.quantity !== undefined) {
-        const usedByOthers = lineItems.reduce((sum, li, idx) => {
-          if (idx === rowIndex || li.productId !== productId || li.sizeName !== item.sizeName) return sum;
-          return sum + li.qty;
-        }, 0);
-        return Math.max(1, (matchedSize.quantity ?? 0) - usedByOthers);
+        variantStock = Number(matchedSize.quantity);
       }
     }
 
-    const usedByOthers = lineItems.reduce((sum, item, idx) => {
-      if (idx === rowIndex || item.productId !== productId) return sum;
-      return sum + item.qty;
+    const usedByOthers = lineItems.reduce((sum, li, idx) => {
+      if (
+        idx === rowIndex ||
+        li.productId !== productId ||
+        (li.colorName || '') !== (item.colorName || '') ||
+        (li.sizeName || '') !== (item.sizeName || '')
+      ) {
+        return sum;
+      }
+      return sum + li.qty;
     }, 0);
-    return Math.max(1, product.stock - usedByOthers);
+
+    return Math.max(1, variantStock - usedByOthers);
   };
 
   const hasInvalidLine = lineItems.some((item, idx) => {
@@ -465,32 +504,90 @@ export default function SalesView({
     setSearchQuery('');
   }, [saleBranchId]);
 
-  const addCartItem = (product: Product, sizeName: string, sizes: any[]) => {
+  const addCartItem = (
+    product: Product,
+    variantOptions?: {
+      colorName?: string;
+      sizeName?: string;
+    }
+  ) => {
     const meta = getProductMeta(product.id) as any;
     const unitType = meta?.unitType || product.unitType || 'PIECE';
     const unitLabel = meta?.unitLabel || product.unitLabel || 'pc';
-    const defaultQty = 1;
-    const matchedSizeObj = sizes.find((s: any) => s.name === sizeName);
-    const resolvedPrice = matchedSizeObj && matchedSizeObj.priceOverride !== null && matchedSizeObj.priceOverride !== undefined && Number(matchedSizeObj.priceOverride) > 0
-      ? Number(matchedSizeObj.priceOverride)
-      : Number(product.price ?? 0);
 
-    const sizeStock = matchedSizeObj && matchedSizeObj.quantity !== undefined
-      ? Number(matchedSizeObj.quantity)
-      : Number(product.stock ?? 0);
+    const colors = (meta?.colors || product.colors || []).filter((c: any) => c.isActive !== false);
+    const standaloneSizes = (meta?.sizes || product.sizes || []).filter((s: any) => s.isActive !== false);
 
-    if (sizes.length > 0 && sizeStock <= 0) {
-      toast.error(`Size ${sizeName} is out of stock!`);
+    // 1. Resolve Color
+    let selectedColorName = variantOptions?.colorName;
+    if (selectedColorName === undefined && colors.length > 0) {
+      const availableColor = colors.find((c: any) => {
+        if (c.sizes && c.sizes.length > 0) {
+          return c.sizes.some((s: any) => (s.quantity ?? 0) > 0);
+        }
+        return (c.quantity ?? 0) > 0;
+      }) || colors[0];
+      selectedColorName = availableColor?.name || '';
+    }
+    const colorName = selectedColorName || '';
+    const matchedColor = colors.find((c: any) => c.name === colorName) || null;
+
+    // 2. Resolve Sizes (color sizes or standalone sizes)
+    let availableSizes: any[] = [];
+    if (matchedColor && matchedColor.sizes && matchedColor.sizes.length > 0) {
+      availableSizes = matchedColor.sizes.filter((s: any) => s.isActive !== false);
+    } else if (standaloneSizes.length > 0) {
+      availableSizes = standaloneSizes;
+    }
+
+    // 3. Resolve Size
+    let selectedSizeName = variantOptions?.sizeName;
+    if (selectedSizeName === undefined && availableSizes.length > 0) {
+      const availableSize = availableSizes.find((s: any) => (s.quantity ?? 0) > 0) || availableSizes[0];
+      selectedSizeName = availableSize?.name || '';
+    }
+    const sizeName = selectedSizeName || '';
+    const matchedSize = availableSizes.find((s: any) => s.name === sizeName) || null;
+
+    // 4. Resolve Stock
+    let variantStock = Number(product.stock ?? 0);
+    if (matchedSize && matchedSize.quantity !== undefined) {
+      variantStock = Number(matchedSize.quantity);
+    } else if (matchedColor && matchedColor.quantity !== undefined) {
+      variantStock = Number(matchedColor.quantity);
+    }
+
+    if (variantStock <= 0) {
+      if (colorName && sizeName) {
+        toast.error(`Variant (Color: ${colorName}, Size: ${sizeName}) is out of stock!`);
+      } else if (colorName) {
+        toast.error(`Color ${colorName} is out of stock!`);
+      } else if (sizeName) {
+        toast.error(`Size ${sizeName} is out of stock!`);
+      } else {
+        toast.error(`${product.name} is out of stock!`);
+      }
       return;
     }
 
+    // 5. Resolve Price
+    const resolvedPrice =
+      matchedSize && matchedSize.priceOverride !== null && matchedSize.priceOverride !== undefined && Number(matchedSize.priceOverride) > 0
+        ? Number(matchedSize.priceOverride)
+        : matchedColor && matchedColor.priceOverride !== null && matchedColor.priceOverride !== undefined && Number(matchedColor.priceOverride) > 0
+          ? Number(matchedColor.priceOverride)
+          : Number(product.price ?? 0);
+
+    const defaultQty = 1;
+
     setLineItems((prev) => {
-      const existingIdx = prev.findIndex((i) => i.productId === product.id && i.sizeName === sizeName);
+      const existingIdx = prev.findIndex(
+        (i) => i.productId === product.id && (i.colorName || '') === colorName && (i.sizeName || '') === sizeName
+      );
       if (existingIdx !== -1) {
         return prev.map((i, idx) => {
           if (idx !== existingIdx) return i;
-          const maxQty = sizeStock;
-          const nextQty = Math.min(maxQty, i.qty + 1);
+          const nextQty = Math.min(variantStock, i.qty + 1);
           return { ...i, qty: nextQty, total: nextQty * i.unitPrice };
         });
       }
@@ -500,13 +597,16 @@ export default function SalesView({
           productId: product.id,
           name: product.name,
           sku: product.sku,
-          qty: Math.min(defaultQty, Math.max(1, sizeStock)),
+          qty: Math.min(defaultQty, Math.max(1, variantStock)),
           unitPrice: resolvedPrice,
-          total: resolvedPrice * Math.min(defaultQty, Math.max(1, sizeStock)),
+          total: resolvedPrice * Math.min(defaultQty, Math.max(1, variantStock)),
           unitType,
           unitLabel,
+          colorName,
+          colorHex: matchedColor?.hexCode || null,
           sizeName,
-          sizes,
+          colors,
+          sizes: availableSizes,
         },
       ];
     });
@@ -515,11 +615,110 @@ export default function SalesView({
   };
 
   const handleSelectProduct = (product: Product) => {
-    const meta = getProductMeta(product.id) as any;
-    const sizes = (meta?.sizes || product.sizes || []).filter((s: any) => s.isActive !== false);
-    const availableSize = sizes.find((s: any) => (s.quantity ?? 0) > 0) || sizes[0];
-    const defaultSize = availableSize ? availableSize.name : '';
-    addCartItem(product, defaultSize, sizes);
+    addCartItem(product);
+  };
+
+  const handleLineColorChange = (index: number, newColorName: string) => {
+    setLineItems((prev) =>
+      prev.map((li, i) => {
+        if (i !== index) return li;
+        const matchedColor = li.colors.find((c) => c.name === newColorName);
+        const metaProduct = getProductMeta(li.productId) as any;
+        const branchProduct = searchableProducts.find((p) => p.id === li.productId);
+        const basePrice = Number(
+          branchProduct?.price ??
+          metaProduct?.price ??
+          products.find((p) => p.id === li.productId)?.price ??
+          0
+        );
+
+        const newSizes = (matchedColor?.sizes || []).filter((s: any) => s.isActive !== false);
+        let newSizeName = '';
+        let matchedSize: any = null;
+        if (newSizes.length > 0) {
+          matchedSize =
+            newSizes.find((s: any) => s.name === li.sizeName && (s.quantity ?? 0) > 0) ||
+            newSizes.find((s: any) => (s.quantity ?? 0) > 0) ||
+            newSizes[0];
+          newSizeName = matchedSize?.name || '';
+        }
+
+        const hasSizeOverride =
+          matchedSize && matchedSize.priceOverride !== null && matchedSize.priceOverride !== undefined && Number(matchedSize.priceOverride) > 0;
+        const hasColorOverride =
+          matchedColor && matchedColor.priceOverride !== null && matchedColor.priceOverride !== undefined && Number(matchedColor.priceOverride) > 0;
+        const newPrice = hasSizeOverride
+          ? Number(matchedSize.priceOverride)
+          : hasColorOverride
+            ? Number(matchedColor.priceOverride)
+            : basePrice;
+
+        const availStock =
+          matchedSize?.quantity !== undefined
+            ? matchedSize.quantity
+            : matchedColor?.quantity !== undefined
+              ? matchedColor.quantity
+              : branchProduct?.stock;
+
+        const adjustedQty = availStock !== undefined ? Math.min(li.qty, Math.max(1, availStock)) : li.qty;
+
+        return {
+          ...li,
+          colorName: newColorName,
+          colorHex: matchedColor?.hexCode || null,
+          sizeName: newSizeName,
+          sizes: newSizes,
+          unitPrice: newPrice,
+          qty: adjustedQty,
+          total: adjustedQty * newPrice,
+        };
+      })
+    );
+  };
+
+  const handleLineSizeChange = (index: number, newSizeName: string) => {
+    setLineItems((prev) =>
+      prev.map((li, i) => {
+        if (i !== index) return li;
+        const matchedSize = li.sizes.find((sz: any) => sz.name === newSizeName);
+        const matchedColor = li.colors.find((c) => c.name === li.colorName);
+        const metaProduct = getProductMeta(li.productId) as any;
+        const branchProduct = searchableProducts.find((p) => p.id === li.productId);
+        const basePrice = Number(
+          branchProduct?.price ??
+          metaProduct?.price ??
+          products.find((p) => p.id === li.productId)?.price ??
+          0
+        );
+
+        const hasSizeOverride =
+          matchedSize && matchedSize.priceOverride !== null && matchedSize.priceOverride !== undefined && Number(matchedSize.priceOverride) > 0;
+        const hasColorOverride =
+          matchedColor && matchedColor.priceOverride !== null && matchedColor.priceOverride !== undefined && Number(matchedColor.priceOverride) > 0;
+        const newPrice = hasSizeOverride
+          ? Number(matchedSize.priceOverride)
+          : hasColorOverride
+            ? Number(matchedColor.priceOverride)
+            : basePrice;
+
+        const availStock =
+          matchedSize?.quantity !== undefined
+            ? matchedSize.quantity
+            : matchedColor?.quantity !== undefined
+              ? matchedColor.quantity
+              : branchProduct?.stock;
+
+        const adjustedQty = availStock !== undefined ? Math.min(li.qty, Math.max(1, availStock)) : li.qty;
+
+        return {
+          ...li,
+          sizeName: newSizeName,
+          unitPrice: newPrice,
+          qty: adjustedQty,
+          total: adjustedQty * newPrice,
+        };
+      })
+    );
   };
 
   const handleBarcodeScan = useCallback((barcode: string) => {
@@ -548,6 +747,7 @@ export default function SalesView({
             quantity: item.qty,
             unitPrice: item.unitPrice,
             ...(item.sizeName ? { sizeName: item.sizeName } : {}),
+            ...(item.colorName ? { colorName: item.colorName } : {}),
           })),
         });
         toast.success(`${t.sales.recorded} ${lineItems.length} ${t.inventory.product}(s), ${totalQty} ${t.sales.qty} ${t.modal.total.toLowerCase()}`);
@@ -719,7 +919,9 @@ export default function SalesView({
                     >
                       {filteredProducts.length > 0 ? (
                         filteredProducts.map((p) => {
-                          const pSizes = (p.sizes && p.sizes.length > 0) ? p.sizes : ((getProductMeta(p.id) as any)?.sizes || []);
+                          const meta = getProductMeta(p.id) as any;
+                          const pColors = (p.colors && p.colors.length > 0) ? p.colors : (meta?.colors || []);
+                          const pSizes = (p.sizes && p.sizes.length > 0) ? p.sizes : (meta?.sizes || []);
                           return (
                             <div
                               key={p.id}
@@ -734,7 +936,72 @@ export default function SalesView({
                               <div className="min-w-0 pr-2">
                                 <div className="font-semibold text-sm">{p.name}</div>
                                 <div className="text-[11px]" style={{ color: Theme.mutedFg }}>{t.modal.sku}: {p.sku}</div>
-                                {pSizes.length > 0 && (
+
+                                {/* Colors & Sizes Breakdown */}
+                                {pColors.length > 0 ? (
+                                  <div className="flex flex-col gap-1 mt-1.5">
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      <span className="text-[10px] text-zinc-500 font-semibold">{t.products?.colors || 'Colors'}:</span>
+                                      {pColors.map((c: any) => {
+                                        const hasColorSizes = c.sizes && c.sizes.length > 0;
+                                        const colorStock = hasColorSizes
+                                          ? c.sizes.reduce((sum: number, s: any) => sum + (Number(s.quantity) || 0), 0)
+                                          : (c.quantity ?? 0);
+                                        const isColorAvail = colorStock > 0;
+
+                                        return (
+                                          <div key={c.name} className="flex flex-wrap items-center gap-1">
+                                            <span
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                addCartItem(p, { colorName: c.name });
+                                              }}
+                                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border transition-all ${
+                                                isColorAvail
+                                                  ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 hover:border-purple-300 cursor-pointer shadow-xs'
+                                                  : 'bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed line-through'
+                                              }`}
+                                              title={isColorAvail ? `Add ${c.name} (${colorStock} in stock)` : `${c.name} is out of stock`}
+                                            >
+                                              {c.hexCode && (
+                                                <span
+                                                  className="w-2.5 h-2.5 rounded-full border border-black/15 shrink-0"
+                                                  style={{ backgroundColor: c.hexCode }}
+                                                />
+                                              )}
+                                              {c.name} {!hasColorSizes && <strong>: {c.quantity ?? 0}</strong>}
+                                            </span>
+
+                                            {hasColorSizes && (
+                                              <span className="inline-flex items-center gap-1">
+                                                {c.sizes.map((s: any) => {
+                                                  const isSizeAvail = (s.quantity ?? 0) > 0;
+                                                  return (
+                                                    <span
+                                                      key={`${c.name}-${s.name}`}
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        addCartItem(p, { colorName: c.name, sizeName: s.name });
+                                                      }}
+                                                      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border transition-all ${
+                                                        isSizeAvail
+                                                          ? 'bg-pink-50 text-pink-700 border-pink-200 hover:bg-pink-100 hover:border-pink-300 cursor-pointer'
+                                                          : 'bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed line-through'
+                                                      }`}
+                                                      title={isSizeAvail ? `Add ${c.name} - ${s.name} (${s.quantity} in stock)` : `${c.name} - ${s.name} is out of stock`}
+                                                    >
+                                                      {s.name}: <strong>{s.quantity ?? 0}</strong>
+                                                    </span>
+                                                  );
+                                                })}
+                                              </span>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                ) : pSizes.length > 0 ? (
                                   <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                                     <span className="text-[10px] text-zinc-500 font-semibold">{t.inventory?.sizeBreakdown || 'Sizes'}:</span>
                                     {pSizes.map((s: any) => {
@@ -744,7 +1011,7 @@ export default function SalesView({
                                           key={s.name}
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            addCartItem(p, s.name, pSizes);
+                                            addCartItem(p, { sizeName: s.name });
                                           }}
                                           className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border transition-all ${isAvailable
                                               ? 'bg-pink-50 text-pink-700 border-pink-200 hover:bg-pink-100 hover:border-pink-300 cursor-pointer shadow-xs'
@@ -757,7 +1024,7 @@ export default function SalesView({
                                       );
                                     })}
                                   </div>
-                                )}
+                                ) : null}
                               </div>
                               <div className="text-xs shrink-0 text-right font-semibold" style={{ color: Theme.fg }}>
                                 <div className="text-sm font-bold text-pink-600">{formatCurrency(p.price)}</div>
@@ -803,49 +1070,69 @@ export default function SalesView({
                               <div className="text-[11px]" style={{ color: Theme.mutedFg }}>
                                 {item.sku} · {item.unitType === 'WEIGHT' ? '⚖️' : '📦'} {item.unitLabel}
                               </div>
-                              {item.sizes.length > 0 && (
-                                <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                                  <select
-                                    value={item.sizeName}
-                                    onChange={(e) => {
-                                      const selectedName = e.target.value;
-                                      setLineItems((prev) =>
-                                        prev.map((li, i) => {
-                                          if (i !== idx) return li;
-                                          const matchedSize = li.sizes.find((sz: any) => sz.name === selectedName);
-                                          const metaProduct = getProductMeta(li.productId) as any;
-                                          const branchProduct = searchableProducts.find((p) => p.id === li.productId);
-                                          const basePrice = Number(
-                                            branchProduct?.price ??
-                                            metaProduct?.price ??
-                                            products.find((p) => p.id === li.productId)?.price ??
-                                            li.unitPrice ??
-                                            0
-                                          );
-                                          const hasOverride = matchedSize && matchedSize.priceOverride !== null && matchedSize.priceOverride !== undefined && Number(matchedSize.priceOverride) > 0;
-                                          const newPrice = hasOverride ? Number(matchedSize.priceOverride) : basePrice;
-                                          const availableStock = matchedSize && matchedSize.quantity !== undefined ? matchedSize.quantity : branchProduct?.stock;
-                                          const adjustedQty = availableStock !== undefined ? Math.min(li.qty, Math.max(1, availableStock)) : li.qty;
-                                          return { ...li, sizeName: selectedName, unitPrice: newPrice, qty: adjustedQty, total: adjustedQty * newPrice };
-                                        })
-                                      );
-                                    }}
-                                    className="rounded border px-2 py-1 text-xs outline-none bg-white font-semibold cursor-pointer"
-                                    style={{ borderColor: Theme.border, color: Theme.fg }}
-                                  >
-                                    {item.sizes.map((s: any) => (
-                                      <option key={s.name} value={s.name} disabled={s.quantity !== undefined && s.quantity <= 0}>
-                                        {s.name} {s.quantity !== undefined ? `(${s.quantity} in stock)` : ''}
-                                      </option>
-                                    ))}
-                                  </select>
+                              {/* Variant Selectors: Color and/or Size */}
+                              {(item.colors?.length > 0 || item.sizes?.length > 0) && (
+                                <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                                  {/* Color Selector */}
+                                  {item.colors?.length > 0 && (
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-[10px] font-semibold text-zinc-400">{t.sales?.color || 'Color'}:</span>
+                                      {item.colors.length > 1 ? (
+                                        <select
+                                          value={item.colorName}
+                                          onChange={(e) => handleLineColorChange(idx, e.target.value)}
+                                          className="rounded border px-2 py-0.5 text-xs outline-none bg-white font-semibold cursor-pointer"
+                                          style={{ borderColor: Theme.border, color: Theme.fg }}
+                                        >
+                                          {item.colors.map((c: any) => (
+                                            <option key={c.name} value={c.name}>
+                                              {c.name}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                                          {item.colorHex && (
+                                            <span className="w-2 h-2 rounded-full border border-black/15 inline-block" style={{ backgroundColor: item.colorHex }} />
+                                          )}
+                                          {item.colorName}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Size Selector */}
+                                  {item.sizes?.length > 0 && (
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-[10px] font-semibold text-zinc-400">{t.sales?.size || 'Size'}:</span>
+                                      {item.sizes.length > 1 ? (
+                                        <select
+                                          value={item.sizeName}
+                                          onChange={(e) => handleLineSizeChange(idx, e.target.value)}
+                                          className="rounded border px-2 py-0.5 text-xs outline-none bg-white font-semibold cursor-pointer"
+                                          style={{ borderColor: Theme.border, color: Theme.fg }}
+                                        >
+                                          {item.sizes.map((s: any) => (
+                                            <option key={s.name} value={s.name} disabled={s.quantity !== undefined && s.quantity <= 0}>
+                                              {s.name} {s.quantity !== undefined ? `(${s.quantity} in stock)` : ''}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      ) : (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-pink-50 text-pink-700 border border-pink-200">
+                                          {item.sizeName}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* In Stock Badge */}
                                   {(() => {
-                                    const matched = item.sizes.find((s: any) => s.name === item.sizeName);
-                                    const qtyAvail = matched?.quantity;
-                                    if (qtyAvail === undefined) return null;
+                                    const qtyAvail = maxQty;
                                     return (
-                                      <span className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded border ${qtyAvail > 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'
-                                        }`}>
+                                      <span className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+                                        qtyAvail > 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'
+                                      }`}>
                                         {qtyAvail > 0 ? `${qtyAvail} available` : 'Out of stock'}
                                       </span>
                                     );
@@ -933,49 +1220,69 @@ export default function SalesView({
                           <div className="text-[10px]" style={{ color: Theme.mutedFg }}>
                             {item.sku} · {item.unitType === 'WEIGHT' ? '⚖️' : '📦'} {item.unitLabel}
                           </div>
-                          {item.sizes.length > 0 && (
+                          {/* Variant Selectors: Color and/or Size */}
+                          {(item.colors?.length > 0 || item.sizes?.length > 0) && (
                             <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                              <select
-                                value={item.sizeName}
-                                onChange={(e) => {
-                                  const selectedName = e.target.value;
-                                  setLineItems((prev) =>
-                                    prev.map((li, i) => {
-                                      if (i !== idx) return li;
-                                      const matchedSize = li.sizes.find((sz: any) => sz.name === selectedName);
-                                      const metaProduct = getProductMeta(li.productId) as any;
-                                      const branchProduct = searchableProducts.find((p) => p.id === li.productId);
-                                      const basePrice = Number(
-                                        branchProduct?.price ??
-                                        metaProduct?.price ??
-                                        products.find((p) => p.id === li.productId)?.price ??
-                                        li.unitPrice ??
-                                        0
-                                      );
-                                      const hasOverride = matchedSize && matchedSize.priceOverride !== null && matchedSize.priceOverride !== undefined && Number(matchedSize.priceOverride) > 0;
-                                      const newPrice = hasOverride ? Number(matchedSize.priceOverride) : basePrice;
-                                      const availableStock = matchedSize && matchedSize.quantity !== undefined ? matchedSize.quantity : branchProduct?.stock;
-                                      const adjustedQty = availableStock !== undefined ? Math.min(li.qty, Math.max(1, availableStock)) : li.qty;
-                                      return { ...li, sizeName: selectedName, unitPrice: newPrice, qty: adjustedQty, total: adjustedQty * newPrice };
-                                    })
-                                  );
-                                }}
-                                className="rounded border px-2 py-1 text-xs outline-none bg-white font-semibold cursor-pointer"
-                                style={{ borderColor: Theme.border, color: Theme.fg }}
-                              >
-                                {item.sizes.map((s: any) => (
-                                  <option key={s.name} value={s.name} disabled={s.quantity !== undefined && s.quantity <= 0}>
-                                    {s.name} {s.quantity !== undefined ? `(${s.quantity} in stock)` : ''}
-                                  </option>
-                                ))}
-                              </select>
+                              {/* Color Selector */}
+                              {item.colors?.length > 0 && (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10px] font-semibold text-zinc-400">{t.sales?.color || 'Color'}:</span>
+                                  {item.colors.length > 1 ? (
+                                    <select
+                                      value={item.colorName}
+                                      onChange={(e) => handleLineColorChange(idx, e.target.value)}
+                                      className="rounded border px-2 py-0.5 text-xs outline-none bg-white font-semibold cursor-pointer"
+                                      style={{ borderColor: Theme.border, color: Theme.fg }}
+                                    >
+                                      {item.colors.map((c: any) => (
+                                        <option key={c.name} value={c.name}>
+                                          {c.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                                      {item.colorHex && (
+                                        <span className="w-2 h-2 rounded-full border border-black/15 inline-block" style={{ backgroundColor: item.colorHex }} />
+                                      )}
+                                      {item.colorName}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Size Selector */}
+                              {item.sizes?.length > 0 && (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10px] font-semibold text-zinc-400">{t.sales?.size || 'Size'}:</span>
+                                  {item.sizes.length > 1 ? (
+                                    <select
+                                      value={item.sizeName}
+                                      onChange={(e) => handleLineSizeChange(idx, e.target.value)}
+                                      className="rounded border px-2 py-0.5 text-xs outline-none bg-white font-semibold cursor-pointer"
+                                      style={{ borderColor: Theme.border, color: Theme.fg }}
+                                    >
+                                      {item.sizes.map((s: any) => (
+                                        <option key={s.name} value={s.name} disabled={s.quantity !== undefined && s.quantity <= 0}>
+                                          {s.name} {s.quantity !== undefined ? `(${s.quantity} in stock)` : ''}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-pink-50 text-pink-700 border border-pink-200">
+                                      {item.sizeName}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* In Stock Badge */}
                               {(() => {
-                                const matched = item.sizes.find((s: any) => s.name === item.sizeName);
-                                const qtyAvail = matched?.quantity;
-                                if (qtyAvail === undefined) return null;
+                                const qtyAvail = maxQty;
                                 return (
-                                  <span className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded border ${qtyAvail > 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'
-                                    }`}>
+                                  <span className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+                                    qtyAvail > 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'
+                                  }`}>
                                     {qtyAvail > 0 ? `${qtyAvail} available` : 'Out of stock'}
                                   </span>
                                 );
@@ -1216,9 +1523,34 @@ export default function SalesView({
                         {sale.saleNumber}
                       </td>
                       <td className="px-2 py-2.5" style={{ color: Theme.fg }}>
-                        {sale.items?.length > 1
-                          ? `${sale.items[0]?.productNameSnapshot || t.sales.saleItem} +${sale.items.length - 1} ${t.sales.more}`
-                          : sale.items?.[0]?.productNameSnapshot || t.sales.saleItem}
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-semibold text-xs text-zinc-900">
+                            {sale.items?.[0]?.productNameSnapshot || t.sales.saleItem}
+                          </span>
+                          {(sale.items?.[0]?.colorName || sale.items?.[0]?.sizeName) && (
+                            <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                              {sale.items[0]?.colorName && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                                  {t.sales?.color || 'Color'}: {sale.items[0].colorName}
+                                </span>
+                              )}
+                              {sale.items[0]?.sizeName && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-pink-50 text-pink-700 border border-pink-200">
+                                  {t.sales?.size || 'Size'}: {sale.items[0].sizeName}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {sale.items && sale.items.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setViewSaleModal(sale)}
+                              className="text-[10px] text-pink-600 font-bold hover:underline text-left mt-0.5"
+                            >
+                              +{sale.items.length - 1} {t.sales.more} ({t.sales?.viewDetails || 'View'})
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="px-2 py-2.5 text-center font-semibold" style={{ color: Theme.fg }}>
                         {sale.totalQty}
@@ -1236,15 +1568,26 @@ export default function SalesView({
                         {sale.soldBy || t.sales.staff}
                       </td>
                       <td className="px-2 py-2.5 text-center">
-                        <Btn
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handlePrintReceipt(sale)}
-                          className="p-1 min-w-[28px] h-7 inline-flex items-center justify-center text-primary hover:bg-primary/10 rounded-lg transition-all"
-                          title={t.sales.printReceipt}
-                        >
-                          🖨️
-                        </Btn>
+                        <div className="flex items-center justify-center gap-1">
+                          <Btn
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setViewSaleModal(sale)}
+                            className="p-1 min-w-[28px] h-7 inline-flex items-center justify-center text-zinc-600 hover:bg-zinc-100 rounded-lg transition-all"
+                            title={t.sales?.viewDetails || 'View Details'}
+                          >
+                            👁️
+                          </Btn>
+                          <Btn
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handlePrintReceipt(sale)}
+                            className="p-1 min-w-[28px] h-7 inline-flex items-center justify-center text-primary hover:bg-primary/10 rounded-lg transition-all"
+                            title={t.sales.printReceipt}
+                          >
+                            🖨️
+                          </Btn>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -1313,6 +1656,140 @@ export default function SalesView({
             >
               ✕
             </button>
+          </div>
+        </div>
+      )}
+
+      {viewSaleModal && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setViewSaleModal(null)}
+        >
+          <div
+            className="flex max-w-full w-[650px] flex-col overflow-hidden bg-white rounded-xl shadow-2xl animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div
+              className="flex items-center justify-between px-5 py-4 border-b"
+              style={{ borderColor: Theme.border }}
+            >
+              <div>
+                <h3 className="text-base font-bold text-zinc-900">
+                  {t.sales?.saleDetails || 'Sale Details'}
+                </h3>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  #{viewSaleModal.saleNumber} · {new Date(viewSaleModal.createdAt).toLocaleString()}
+                </p>
+              </div>
+              <button
+                onClick={() => setViewSaleModal(null)}
+                className="p-1 rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Sale Meta Info */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 bg-zinc-50/60 border-b text-xs" style={{ borderColor: Theme.border }}>
+              <div>
+                <span className="text-zinc-400 block text-[10px] uppercase font-bold tracking-wider">{t.sales?.branch || 'Branch'}</span>
+                <span className="font-semibold text-zinc-800">{viewSaleModal.branchName || t.sales?.main || 'Main'}</span>
+              </div>
+              <div>
+                <span className="text-zinc-400 block text-[10px] uppercase font-bold tracking-wider">{t.sales?.by || 'Served By'}</span>
+                <span className="font-semibold text-zinc-800">{viewSaleModal.soldBy || t.sales?.staff || 'Staff'}</span>
+              </div>
+              {viewSaleModal.note && (
+                <div className="col-span-2 sm:col-span-1">
+                  <span className="text-zinc-400 block text-[10px] uppercase font-bold tracking-wider">Note</span>
+                  <span className="font-medium text-zinc-700 truncate block">{viewSaleModal.note}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Items Table */}
+            <div className="p-4 max-h-[50vh] overflow-y-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b text-zinc-400 uppercase text-[10px] font-bold" style={{ borderColor: Theme.border }}>
+                    <th className="py-2">{t.sales?.product || 'Item'}</th>
+                    <th className="py-2 text-center">{t.sales?.color || 'Color'}</th>
+                    <th className="py-2 text-center">{t.sales?.size || 'Size'}</th>
+                    <th className="py-2 text-right">{t.sales?.unitPrice || 'Price'}</th>
+                    <th className="py-2 text-center">{t.sales?.qty || 'Qty'}</th>
+                    <th className="py-2 text-right">{t.sales?.lineTotal || 'Total'}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y" style={{ borderColor: Theme.border }}>
+                  {(viewSaleModal.items || []).map((item: any, i: number) => (
+                    <tr key={item.id || i} className="hover:bg-zinc-50/50">
+                      <td className="py-2.5 pr-2">
+                        <div className="font-semibold text-zinc-900">{item.productNameSnapshot}</div>
+                        <div className="text-[10px] text-zinc-400">{item.productSkuSnapshot}</div>
+                      </td>
+                      <td className="py-2.5 text-center">
+                        {item.colorName ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                            {item.colorName}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-300">—</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 text-center">
+                        {item.sizeName ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-pink-50 text-pink-700 border border-pink-200">
+                            {item.sizeName}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-300">—</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 text-right font-medium text-zinc-700">
+                        {formatCurrency(item.unitPrice)}
+                      </td>
+                      <td className="py-2.5 text-center font-bold text-zinc-800">
+                        {item.quantity}
+                      </td>
+                      <td className="py-2.5 text-right font-bold" style={{ color: Theme.primary }}>
+                        {formatCurrency(item.lineTotal || (item.quantity * item.unitPrice))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer / Summary */}
+            <div
+              className="flex items-center justify-between px-5 py-3.5 bg-zinc-50 border-t"
+              style={{ borderColor: Theme.border }}
+            >
+              <div className="flex items-center gap-4 text-xs font-semibold text-zinc-600">
+                <span>{t.sales?.totalQty || 'Total Qty'}: <strong className="text-zinc-900">{viewSaleModal.totalQty}</strong></span>
+                <span>{t.sales?.grandTotal || 'Grand Total'}: <strong className="text-pink-600 text-sm font-bold">{formatCurrency(viewSaleModal.totalAmount)}</strong></span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Btn
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setViewSaleModal(null)}
+                >
+                  {t.sales?.close || 'Close'}
+                </Btn>
+                <Btn
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    handlePrintReceipt(viewSaleModal);
+                  }}
+                  className="flex items-center gap-1.5"
+                >
+                  🖨️ {t.sales?.printReceipt || 'Print Receipt'}
+                </Btn>
+              </div>
+            </div>
           </div>
         </div>
       )}

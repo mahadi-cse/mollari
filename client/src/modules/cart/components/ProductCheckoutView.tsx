@@ -47,7 +47,8 @@ function ProductCheckoutContent() {
   
   const slug = searchParams?.get('slug') || '';
   const initialQty = parseInt(searchParams?.get('qty') || '1', 10);
-  
+  const selectedSize = searchParams?.get('size') || '';
+  const selectedColor = searchParams?.get('color') || '';
 
   const [quantity, setQuantity] = useState(initialQty > 0 ? initialQty : 1);
   const [form, setForm] = useState<CheckoutFormState>({
@@ -96,17 +97,44 @@ function ProductCheckoutContent() {
     },
   });
 
+  const matchingColor = useMemo(() => {
+    if (!product?.colors?.length || !selectedColor) return null;
+    return product.colors.find((c: any) => c.name.toLowerCase() === selectedColor.toLowerCase()) || null;
+  }, [product, selectedColor]);
+
+  const matchingSize = useMemo(() => {
+    if (!selectedSize) return null;
+    if (matchingColor?.sizes?.length) {
+      return matchingColor.sizes.find((s: any) => s.name.toLowerCase() === selectedSize.toLowerCase()) || null;
+    }
+    if (product?.sizes?.length) {
+      return product.sizes.find((s: any) => s.name.toLowerCase() === selectedSize.toLowerCase()) || null;
+    }
+    return null;
+  }, [matchingColor, product, selectedSize]);
+
   const availableStock = useMemo(() => {
+    if (!product) return 0;
+    if (matchingSize && matchingSize.quantity !== undefined && matchingSize.quantity !== null) {
+      return Number(matchingSize.quantity);
+    }
+    if (matchingColor && matchingColor.quantity !== undefined && matchingColor.quantity !== null) {
+      return Number(matchingColor.quantity);
+    }
     return (product?.inventories || []).reduce((total, inventory) => {
       const available = Math.max(0, (inventory.quantity || 0) - (inventory.reservedQty || 0));
       return total + available;
     }, 0);
-  }, [product]);
+  }, [product, matchingSize, matchingColor]);
 
   const inStock = availableStock > 0;
   const maxAllowedQuantity = inStock ? Math.min(availableStock, 10) : 0;
   const safeQuantity = inStock ? Math.min(Math.max(1, quantity), maxAllowedQuantity || 1) : 1;
-  const price = Number(product?.price || 0);
+  const price = useMemo(() => {
+    if (matchingSize?.priceOverride) return Number(matchingSize.priceOverride);
+    if (matchingColor?.priceOverride) return Number(matchingColor.priceOverride);
+    return Number(product?.price || 0);
+  }, [matchingSize, matchingColor, product]);
   const subtotal = price * safeQuantity;
 
   const handleApplyCoupon = async () => {
@@ -279,11 +307,33 @@ function ProductCheckoutContent() {
             <div className="p-5 sm:p-6 flex flex-col gap-6">
               <div style={{ display: 'flex', gap: 14 }}>
                 <div style={{ width: 80, height: 80, flexShrink: 0, borderRadius: 12, border: `1.5px solid ${PINK_LIGHT}`, padding: 4, background: '#fff' }}>
-                  <img src={images[0]} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }} />
+                  <img
+                    src={product.colors?.find((c: any) => c.name.toLowerCase() === selectedColor.toLowerCase())?.imageUrl || images[0]}
+                    alt={product.name}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }}
+                  />
                 </div>
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <p style={{ fontSize: 15, fontWeight: 700, color: DARK, lineHeight: 1.4, marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{product.name}</p>
+                  <p style={{ fontSize: 15, fontWeight: 700, color: DARK, lineHeight: 1.4, marginBottom: (selectedColor || selectedSize) ? 4 : 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{product.name}</p>
                   
+                  {(selectedColor || selectedSize) && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                      {selectedColor && (
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: '#fdf2f8', color: '#db2777', border: '1px solid #fbcfe8', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          {product.colors?.find((c: any) => c.name.toLowerCase() === selectedColor.toLowerCase())?.hexCode && (
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: product.colors?.find((c: any) => c.name.toLowerCase() === selectedColor.toLowerCase())?.hexCode, display: 'inline-block' }} />
+                          )}
+                          Color: {selectedColor}
+                        </span>
+                      )}
+                      {selectedSize && (
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: '#f3f4f6', color: '#374151', border: '1px solid #e5e7eb' }}>
+                          Size: {selectedSize}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   {/* Quantity Selector */}
                   <div style={{ display: 'inline-flex', alignItems: 'center', border: `1.5px solid ${PINK_LIGHT}`, borderRadius: 10, overflow: 'hidden', background: '#fff', width: 'fit-content' }}>
                     <button type="button" onClick={() => setQuantity(Math.max(1, safeQuantity - 1))} style={{ width: 30, height: 30, fontSize: 16, fontWeight: 700, color: GRAY, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s', background: 'none', border: 'none', cursor: 'pointer' }}>−</button>

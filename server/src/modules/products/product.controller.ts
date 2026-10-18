@@ -58,7 +58,7 @@ export const updateProduct: RequestHandler = asyncHandler(async (req, res) => {
 
   const oldProduct = await prisma.product.findUnique({
     where: { id: Number(id) },
-    include: { sizes: true },
+    include: { sizes: true, colors: true },
   });
 
   const product = await productService.updateProduct(Number(id), req.body);

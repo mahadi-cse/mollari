@@ -10,6 +10,7 @@ export interface Product {
   status: 'active' | 'low' | 'out';
   warehouse?: string;
   sizes?: any[];
+  colors?: any[];
   unitType?: 'PIECE' | 'WEIGHT';
   unitLabel?: string;
 }

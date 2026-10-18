@@ -23,6 +23,25 @@ export interface CreateProductPayload {
     quantity?: number;
     isActive?: boolean;
   }>;
+  colors?: Array<{
+    name: string;
+    hexCode?: string | null;
+    imageUrl?: string | null;
+    quantity?: number;
+    priceOverride?: number | null;
+    costPriceOverride?: number | null;
+    sortOrder?: number;
+    isActive?: boolean;
+    sizes?: Array<{
+      name: string;
+      sortOrder?: number;
+      imageUrl?: string | null;
+      priceOverride?: number | null;
+      costPriceOverride?: number | null;
+      quantity?: number;
+      isActive?: boolean;
+    }>;
+  }>;
 }
 
 export interface UpdateProductPayload extends Partial<CreateProductPayload> {

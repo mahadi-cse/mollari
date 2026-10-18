@@ -25,6 +25,12 @@ export class ManualSaleService {
           sizes: {
             where: { isActive: true },
           },
+          colors: {
+            where: { isActive: true },
+            include: {
+              sizes: { where: { isActive: true } },
+            },
+          },
         },
       });
 
@@ -52,21 +58,28 @@ export class ManualSaleService {
 
       const lineItems = data.items.map((item) => {
         const product = productMap.get(item.productId)!;
+        const matchedColor = item.colorName
+          ? product.colors?.find((c) => c.name === item.colorName)
+          : null;
         const matchedSize = item.sizeName
-          ? product.sizes.find((s) => s.name === item.sizeName)
+          ? (matchedColor?.sizes?.find((s) => s.name === item.sizeName) || product.sizes?.find((s) => s.name === item.sizeName))
           : null;
 
         const unitPrice = item.unitPrice && item.unitPrice > 0
           ? item.unitPrice
           : matchedSize && matchedSize.priceOverride !== null
             ? toNumber(matchedSize.priceOverride)
-            : toNumber(product.price);
+            : matchedColor && matchedColor.priceOverride !== null
+              ? toNumber(matchedColor.priceOverride)
+              : toNumber(product.price);
 
         const costPrice = matchedSize && matchedSize.costPriceOverride !== null
           ? toNumber(matchedSize.costPriceOverride)
-          : product.costPrice !== null
-            ? toNumber(product.costPrice)
-            : null;
+          : matchedColor && matchedColor.costPriceOverride !== null
+            ? toNumber(matchedColor.costPriceOverride)
+            : product.costPrice !== null
+              ? toNumber(product.costPrice)
+              : null;
 
         const lineTotal = unitPrice * item.quantity;
         return {
@@ -78,6 +91,7 @@ export class ManualSaleService {
           lineTotal,
           costPrice,
           sizeName: item.sizeName || null,
+          colorName: item.colorName || null,
         };
       });
 
@@ -145,6 +159,7 @@ export class ManualSaleService {
               lineTotal: item.lineTotal,
               costPrice: item.costPrice,
               sizeName: item.sizeName,
+              colorName: item.colorName,
             })),
           },
         },
@@ -192,15 +207,48 @@ export class ManualSaleService {
               reference: saleNumber,
               notes: `Manual sale recorded (${saleNumber})`,
               sizeName: pItem.sizeName || null,
+              colorName: pItem.colorName || null,
               performedBy: resolvedSoldBy,
             },
           });
         }
       }
 
-      // Validate and decrement size quantity for items sold with a specific size
+      // Validate and decrement variant quantity (color and/or size) for items sold
       for (const item of lineItems) {
-        if (item.sizeName) {
+        if (item.colorName && item.sizeName) {
+          const colorRecord = await tx.productColor.findFirst({
+            where: { productId: item.productId, name: item.colorName },
+            include: { sizes: true },
+          });
+          const sizeRecord = colorRecord?.sizes.find((s) => s.name === item.sizeName);
+          if (sizeRecord && sizeRecord.quantity < item.quantity) {
+            throw new ConflictError(
+              `Insufficient stock for ${item.productNameSnapshot} (Color: ${item.colorName}, Size: ${item.sizeName}). Available: ${sizeRecord.quantity}, requested: ${item.quantity}`
+            );
+          }
+          if (sizeRecord) {
+            await tx.productSize.update({
+              where: { id: sizeRecord.id },
+              data: { quantity: { decrement: item.quantity } },
+            });
+          }
+        } else if (item.colorName) {
+          const colorRecord = await tx.productColor.findFirst({
+            where: { productId: item.productId, name: item.colorName },
+          });
+          if (colorRecord && colorRecord.quantity < item.quantity) {
+            throw new ConflictError(
+              `Insufficient stock for ${item.productNameSnapshot} (Color: ${item.colorName}). Available: ${colorRecord.quantity}, requested: ${item.quantity}`
+            );
+          }
+          if (colorRecord) {
+            await tx.productColor.update({
+              where: { id: colorRecord.id },
+              data: { quantity: { decrement: item.quantity } },
+            });
+          }
+        } else if (item.sizeName) {
           const productSize = await tx.productSize.findFirst({
             where: { productId: item.productId, name: item.sizeName },
           });
@@ -209,10 +257,12 @@ export class ManualSaleService {
               `Insufficient stock for ${item.productNameSnapshot} (Size: ${item.sizeName}). Available: ${productSize.quantity}, requested: ${item.quantity}`
             );
           }
-          await tx.productSize.updateMany({
-            where: { productId: item.productId, name: item.sizeName },
-            data: { quantity: { decrement: item.quantity } },
-          });
+          if (productSize) {
+            await tx.productSize.update({
+              where: { id: productSize.id },
+              data: { quantity: { decrement: item.quantity } },
+            });
+          }
         }
       }
 
@@ -234,6 +284,8 @@ export class ManualSaleService {
           quantity: item.quantity,
           unitPrice: toNumber(item.unitPrice),
           lineTotal: toNumber(item.lineTotal),
+          sizeName: item.sizeName,
+          colorName: item.colorName,
         })),
       };
     }).then(async (result) => {
@@ -270,6 +322,8 @@ export class ManualSaleService {
                   OR: [
                     { productNameSnapshot: { contains: search, mode: 'insensitive' } },
                     { productSkuSnapshot: { contains: search, mode: 'insensitive' } },
+                    { sizeName: { contains: search, mode: 'insensitive' } },
+                    { colorName: { contains: search, mode: 'insensitive' } },
                   ],
                 },
               },
@@ -309,6 +363,8 @@ export class ManualSaleService {
           quantity: item.quantity,
           unitPrice: toNumber(item.unitPrice),
           lineTotal: toNumber(item.lineTotal),
+          sizeName: item.sizeName,
+          colorName: item.colorName,
         })),
       })),
       total,

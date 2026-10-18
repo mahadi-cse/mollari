@@ -19,15 +19,30 @@ export interface ProductInventorySnapshot {
 }
 
 export interface ProductSize {
-  id: number;
+  id?: number;
   productId?: number;
+  colorId?: number | null;
   name: string;
-  sortOrder: number;
+  sortOrder?: number;
   imageUrl?: string | null;
   priceOverride?: number | null;
   costPriceOverride?: number | null;
   quantity?: number;
-  isActive: boolean;
+  isActive?: boolean;
+}
+
+export interface ProductColor {
+  id?: number;
+  productId?: number;
+  name: string;
+  hexCode?: string | null;
+  imageUrl?: string | null;
+  quantity?: number;
+  priceOverride?: number | null;
+  costPriceOverride?: number | null;
+  sortOrder?: number;
+  isActive?: boolean;
+  sizes?: ProductSize[];
 }
 
 export type UnitType = 'PIECE' | 'WEIGHT';
@@ -53,6 +68,7 @@ export interface Product {
   unitType: UnitType;
   unitLabel: string;
   sizes?: ProductSize[];
+  colors?: ProductColor[];
   inventories?: ProductInventorySnapshot[];
   createdAt: string;
   updatedAt: string;

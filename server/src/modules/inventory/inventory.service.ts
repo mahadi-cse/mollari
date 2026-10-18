@@ -36,7 +36,13 @@ export class InventoryService {
         include: {
           product: {
             include: {
-              sizes: { orderBy: { sortOrder: 'asc' } },
+              sizes: { where: { colorId: null }, orderBy: { sortOrder: 'asc' } },
+              colors: {
+                orderBy: { sortOrder: 'asc' },
+                include: {
+                  sizes: { orderBy: { sortOrder: 'asc' } },
+                },
+              },
             },
           },
           branch: true,
@@ -61,6 +67,7 @@ export class InventoryService {
           unitType: inv.product.unitType,
           unitLabel: inv.product.unitLabel,
           sizes: inv.product.sizes,
+          colors: inv.product.colors,
         },
         quantity: inv.quantity,
         reservedQty: inv.reservedQty,
@@ -81,7 +88,13 @@ export class InventoryService {
     const product = await prisma.product.findUnique({
       where: { id: productId },
       include: {
-        sizes: { orderBy: { sortOrder: 'asc' } },
+        sizes: { where: { colorId: null }, orderBy: { sortOrder: 'asc' } },
+        colors: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            sizes: { orderBy: { sortOrder: 'asc' } },
+          },
+        },
       },
     });
     if (!product) throw new NotFoundError('Product not found');
@@ -102,7 +115,7 @@ export class InventoryService {
 
     return {
       productId,
-      product: { name: product.name, sku: product.sku, price: product.price, sizes: product.sizes },
+      product: { name: product.name, sku: product.sku, price: product.price, sizes: product.sizes, colors: product.colors },
       totalQuantity,
       totalReserved,
       availableQty: totalQuantity - totalReserved,
@@ -155,8 +168,35 @@ export class InventoryService {
       const beforeQty = inventory.quantity;
       let newBalance = beforeQty + data.quantity;
 
-      // Handle size-level quantity updates
-      if (data.sizeName) {
+      // Handle color and/or size-level quantity updates
+      if (data.colorName && data.sizeName) {
+        // Nested size under a color
+        const colorRecord = await tx.productColor.findFirst({
+          where: { productId: data.productId, name: data.colorName },
+          include: { sizes: true },
+        });
+        const sizeRecord = colorRecord?.sizes.find((s) => s.name === data.sizeName);
+        if (sizeRecord) {
+          const updatedSizeQty = Math.max(0, sizeRecord.quantity + data.quantity);
+          await tx.productSize.update({
+            where: { id: sizeRecord.id },
+            data: { quantity: updatedSizeQty },
+          });
+        }
+      } else if (data.colorName) {
+        // Color with no sizes (one-size color)
+        const colorRecord = await tx.productColor.findFirst({
+          where: { productId: data.productId, name: data.colorName },
+        });
+        if (colorRecord) {
+          const updatedColorQty = Math.max(0, colorRecord.quantity + data.quantity);
+          await tx.productColor.update({
+            where: { id: colorRecord.id },
+            data: { quantity: updatedColorQty },
+          });
+        }
+      } else if (data.sizeName) {
+        // Standalone size
         const sizeRecord = await tx.productSize.findFirst({
           where: { productId: data.productId, name: data.sizeName },
         });
@@ -174,13 +214,37 @@ export class InventoryService {
             data: { quantity: Math.max(0, s.quantity) },
           });
         }
+      } else if (data.colors && data.colors.length > 0) {
+        for (const c of data.colors) {
+          await tx.productColor.updateMany({
+            where: { productId: data.productId, name: c.name },
+            data: { quantity: Math.max(0, c.quantity) },
+          });
+        }
       }
 
-      // If product has sizes, keep total inventory quantity synchronized with the sum of all sizes
-      const productSizes = await tx.productSize.findMany({
-        where: { productId: data.productId },
-      });
-      if (productSizes.length > 0 && (data.sizeName || (data.sizes && data.sizes.length > 0))) {
+      // If product has colors/sizes, keep total inventory quantity synchronized
+      const [productColors, productSizes] = await Promise.all([
+        tx.productColor.findMany({
+          where: { productId: data.productId },
+          include: { sizes: true },
+        }),
+        tx.productSize.findMany({
+          where: { productId: data.productId, colorId: null },
+        }),
+      ]);
+
+      if (productColors.length > 0) {
+        let totalVariantQty = 0;
+        for (const col of productColors) {
+          if (col.sizes && col.sizes.length > 0) {
+            totalVariantQty += col.sizes.reduce((sum, s) => sum + s.quantity, 0);
+          } else {
+            totalVariantQty += col.quantity;
+          }
+        }
+        newBalance = totalVariantQty;
+      } else if (productSizes.length > 0) {
         newBalance = productSizes.reduce((sum, s) => sum + s.quantity, 0);
       }
 
@@ -197,6 +261,7 @@ export class InventoryService {
           manufactureDate: data.manufactureDate ? new Date(data.manufactureDate) : undefined,
           expiryDate: data.expiryDate ? new Date(data.expiryDate) : undefined,
           sizeName: data.sizeName || null,
+          colorName: data.colorName || null,
           performedBy: data.performedBy || 'Staff',
         },
       });
@@ -541,6 +606,7 @@ export class InventoryService {
         { reference: { contains: q, mode: 'insensitive' } },
         { notes: { contains: q, mode: 'insensitive' } },
         { sizeName: { contains: q, mode: 'insensitive' } },
+        { colorName: { contains: q, mode: 'insensitive' } },
         { performedBy: { contains: q, mode: 'insensitive' } },
         { inventory: { product: { name: { contains: q, mode: 'insensitive' } } } },
         { inventory: { product: { sku: { contains: q, mode: 'insensitive' } } } },
@@ -663,6 +729,7 @@ export class InventoryService {
         manufactureDate: tx.manufactureDate,
         expiryDate: tx.expiryDate,
         sizeName: tx.sizeName,
+        colorName: tx.colorName,
         performedBy: resolvePerformedBy(tx),
         createdAt: tx.createdAt,
       })),

@@ -6,6 +6,7 @@ export interface ManualSaleItemPayload {
   quantity: number;
   unitPrice?: number;
   sizeName?: string;
+  colorName?: string;
 }
 
 export interface CreateManualSaleRequest {
@@ -24,6 +25,8 @@ export interface ManualSaleItemResponse {
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  sizeName?: string | null;
+  colorName?: string | null;
 }
 
 export interface ManualSaleResponse {

@@ -50,6 +50,16 @@ export class ProductService {
       }
     }
 
+    if (data.colors && data.colors.length > 0) {
+      const normalizedColors = data.colors.map((c) => c.name.trim().toLowerCase());
+      if (new Set(normalizedColors).size !== normalizedColors.length) {
+        throw new ConflictError('Each product color must have a unique name (e.g. Red, Blue, Black).');
+      }
+    }
+
+    const hasColors = Boolean(data.colors && data.colors.length > 0);
+    const hasSizes = Boolean(data.sizes && data.sizes.length > 0);
+
     const product = await prisma.product.create({
       data: {
         name: data.name,
@@ -68,30 +78,76 @@ export class ProductService {
         weight: data.weight,
         unitType: data.unitType || 'PIECE',
         unitLabel: data.unitLabel || 'pc',
-        ...(data.sizes && data.sizes.length > 0
-          ? {
-              sizes: {
-                create: data.sizes.map((s, i) => ({
-                  name: s.name.trim(),
-                  sortOrder: s.sortOrder ?? i,
-                  imageUrl: s.imageUrl || null,
-                  priceOverride: s.priceOverride || null,
-                  costPriceOverride: s.costPriceOverride || null,
-                  quantity: s.quantity ?? 0,
-                  isActive: s.isActive ?? true,
-                })),
-              },
-            }
-          : {}),
       },
-      include: { sizes: { orderBy: { sortOrder: 'asc' } } },
     });
 
-    const defaultBranchId = data.branchId || (await this.getDefaultBranchId());
-    const totalOpeningStock = (data.sizes && data.sizes.length > 0)
-      ? data.sizes.reduce((sum, s) => sum + (Number(s.quantity) || 0), 0)
-      : (data.openingStock || 0);
+    // 1. If colors provided
+    if (hasColors && data.colors) {
+      for (let i = 0; i < data.colors.length; i++) {
+        const c = data.colors[i];
+        const color = await prisma.productColor.create({
+          data: {
+            productId: product.id,
+            name: c.name.trim(),
+            hexCode: c.hexCode || null,
+            imageUrl: c.imageUrl || null,
+            quantity: c.quantity ?? 0,
+            priceOverride: c.priceOverride || null,
+            costPriceOverride: c.costPriceOverride || null,
+            sortOrder: c.sortOrder ?? i,
+            isActive: c.isActive ?? true,
+          },
+        });
 
+        if (c.sizes && c.sizes.length > 0) {
+          await prisma.productSize.createMany({
+            data: c.sizes.map((s, si) => ({
+              productId: product.id,
+              colorId: color.id,
+              name: s.name.trim(),
+              sortOrder: s.sortOrder ?? si,
+              imageUrl: s.imageUrl || null,
+              priceOverride: s.priceOverride || null,
+              costPriceOverride: s.costPriceOverride || null,
+              quantity: s.quantity ?? 0,
+              isActive: s.isActive ?? true,
+            })),
+          });
+        }
+      }
+    } else if (hasSizes && data.sizes) {
+      // Standalone sizes (no colors)
+      await prisma.productSize.createMany({
+        data: data.sizes.map((s, si) => ({
+          productId: product.id,
+          colorId: null,
+          name: s.name.trim(),
+          sortOrder: s.sortOrder ?? si,
+          imageUrl: s.imageUrl || null,
+          priceOverride: s.priceOverride || null,
+          costPriceOverride: s.costPriceOverride || null,
+          quantity: s.quantity ?? 0,
+          isActive: s.isActive ?? true,
+        })),
+      });
+    }
+
+    // Calculate total opening stock
+    let totalOpeningStock = 0;
+    if (hasColors && data.colors) {
+      totalOpeningStock = data.colors.reduce((sum, c) => {
+        if (c.sizes && c.sizes.length > 0) {
+          return sum + c.sizes.reduce((sSum, s) => sSum + (Number(s.quantity) || 0), 0);
+        }
+        return sum + (Number(c.quantity) || 0);
+      }, 0);
+    } else if (hasSizes && data.sizes) {
+      totalOpeningStock = data.sizes.reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
+    } else {
+      totalOpeningStock = Number(data.openingStock) || 0;
+    }
+
+    const defaultBranchId = data.branchId || (await this.getDefaultBranchId());
     await prisma.inventory.create({
       data: {
         productId: product.id,
@@ -103,7 +159,16 @@ export class ProductService {
     });
 
     await cacheInvalidatePattern('products:list:*');
-    return product;
+    return prisma.product.findUniqueOrThrow({
+      where: { id: product.id },
+      include: {
+        sizes: { where: { colorId: null }, orderBy: { sortOrder: 'asc' } },
+        colors: {
+          orderBy: { sortOrder: 'asc' },
+          include: { sizes: { orderBy: { sortOrder: 'asc' } } },
+        },
+      },
+    });
   }
 
   async getProductBySlug(slug: string) {
@@ -116,7 +181,14 @@ export class ProductService {
       include: {
         category: true,
         inventories: true,
-        sizes: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } },
+        sizes: { where: { colorId: null, isActive: true }, orderBy: { sortOrder: 'asc' } },
+        colors: {
+          where: { isActive: true },
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            sizes: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } },
+          },
+        },
       },
     });
 
@@ -179,7 +251,17 @@ export class ProductService {
     const [products, total] = await Promise.all([
       prisma.product.findMany({
         where,
-        include: { category: true, inventories: true, sizes: { orderBy: { sortOrder: 'asc' } } },
+        include: {
+          category: true,
+          inventories: true,
+          sizes: { where: { colorId: null }, orderBy: { sortOrder: 'asc' } },
+          colors: {
+            orderBy: { sortOrder: 'asc' },
+            include: {
+              sizes: { orderBy: { sortOrder: 'asc' } },
+            },
+          },
+        },
         skip,
         take,
         orderBy,
@@ -248,19 +330,115 @@ export class ProductService {
     if (data.unitType !== undefined) updateData.unitType = data.unitType;
     if (data.unitLabel !== undefined) updateData.unitLabel = data.unitLabel;
 
-    if (data.sizes !== undefined) {
-      if (data.sizes.length > 0) {
+    const hasColors = data.colors !== undefined;
+    const hasSizes = data.sizes !== undefined;
+
+    if (hasColors) {
+      if (data.colors && data.colors.length > 0) {
+        const normalizedColors = data.colors.map((c) => c.name.trim().toLowerCase());
+        if (new Set(normalizedColors).size !== normalizedColors.length) {
+          throw new ConflictError('Each product color must have a unique name (e.g. Red, Blue, Black).');
+        }
+      }
+
+      // Delete existing sizes and colors for this product
+      await prisma.productSize.deleteMany({ where: { productId: id } });
+      await prisma.productColor.deleteMany({ where: { productId: id } });
+
+      if (data.colors && data.colors.length > 0) {
+        for (let i = 0; i < data.colors.length; i++) {
+          const c = data.colors[i];
+          const color = await prisma.productColor.create({
+            data: {
+              productId: id,
+              name: c.name.trim(),
+              hexCode: c.hexCode || null,
+              imageUrl: c.imageUrl || null,
+              quantity: c.quantity ?? 0,
+              priceOverride: c.priceOverride || null,
+              costPriceOverride: c.costPriceOverride || null,
+              sortOrder: c.sortOrder ?? i,
+              isActive: c.isActive ?? true,
+            },
+          });
+
+          if (c.sizes && c.sizes.length > 0) {
+            await prisma.productSize.createMany({
+              data: c.sizes.map((s, si) => ({
+                productId: id,
+                colorId: color.id,
+                name: s.name.trim(),
+                sortOrder: s.sortOrder ?? si,
+                imageUrl: s.imageUrl || null,
+                priceOverride: s.priceOverride || null,
+                costPriceOverride: s.costPriceOverride || null,
+                quantity: s.quantity ?? 0,
+                isActive: s.isActive ?? true,
+              })),
+            });
+          }
+        }
+
+        const totalStock = data.colors.reduce((sum, c) => {
+          if (c.sizes && c.sizes.length > 0) {
+            return sum + c.sizes.reduce((sSum, s) => sSum + (Number(s.quantity) || 0), 0);
+          }
+          return sum + (Number(c.quantity) || 0);
+        }, 0);
+
+        const existingInv = await prisma.inventory.findFirst({
+          where: { productId: id },
+          orderBy: { id: 'asc' },
+        });
+        if (existingInv) {
+          await prisma.inventory.update({
+            where: { id: existingInv.id },
+            data: { quantity: totalStock },
+          });
+        }
+      } else if (hasSizes && data.sizes && data.sizes.length > 0) {
+        // Colors array was empty, but standalone sizes provided
+        await prisma.productSize.createMany({
+          data: data.sizes.map((s, si) => ({
+            productId: id,
+            colorId: null,
+            name: s.name.trim(),
+            sortOrder: s.sortOrder ?? si,
+            imageUrl: s.imageUrl || null,
+            priceOverride: s.priceOverride || null,
+            costPriceOverride: s.costPriceOverride || null,
+            quantity: s.quantity ?? 0,
+            isActive: s.isActive ?? true,
+          })),
+        });
+
+        const totalStock = data.sizes.reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
+        const existingInv = await prisma.inventory.findFirst({
+          where: { productId: id },
+          orderBy: { id: 'asc' },
+        });
+        if (existingInv) {
+          await prisma.inventory.update({
+            where: { id: existingInv.id },
+            data: { quantity: totalStock },
+          });
+        }
+      }
+    } else if (hasSizes) {
+      // Standalone sizes update (colors untouched)
+      if (data.sizes && data.sizes.length > 0) {
         const normalizedNames = data.sizes.map((s) => s.name.trim().toLowerCase());
         if (new Set(normalizedNames).size !== normalizedNames.length) {
           throw new ConflictError('Each product size must have a unique name (e.g. S, M, L).');
         }
       }
 
-      await prisma.productSize.deleteMany({ where: { productId: id } });
-      if (data.sizes.length > 0) {
+      await prisma.productSize.deleteMany({ where: { productId: id, colorId: null } });
+      if (data.sizes && data.sizes.length > 0) {
         await prisma.productSize.createMany({
           data: data.sizes.map((s, i) => ({
             productId: id,
+            colorId: null,
             name: s.name.trim(),
             sortOrder: s.sortOrder ?? i,
             imageUrl: s.imageUrl || null,
@@ -271,7 +449,6 @@ export class ProductService {
           })),
         });
 
-        // Sync total inventory quantity if sizes were updated
         const totalSizeStock = data.sizes.reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
         const existingInv = await prisma.inventory.findFirst({
           where: { productId: id },
@@ -289,7 +466,15 @@ export class ProductService {
     const updated = await prisma.product.update({
       where: { id },
       data: updateData,
-      include: { category: true, inventories: true, sizes: { orderBy: { sortOrder: 'asc' } } },
+      include: {
+        category: true,
+        inventories: true,
+        sizes: { where: { colorId: null }, orderBy: { sortOrder: 'asc' } },
+        colors: {
+          orderBy: { sortOrder: 'asc' },
+          include: { sizes: { orderBy: { sortOrder: 'asc' } } },
+        },
+      },
     });
 
     // Invalidate product caches + homepage slider if isFeatured changed
@@ -346,6 +531,7 @@ export class ProductService {
 
         // 4. Product dependencies
         await tx.productSize.deleteMany({ where: { productId: id } });
+        await tx.productColor.deleteMany({ where: { productId: id } });
         await tx.productReview.deleteMany({ where: { productId: id } });
         await tx.productAnalytics.deleteMany({ where: { productId: id } });
         await tx.wishlist.deleteMany({ where: { productId: id } });
@@ -443,7 +629,15 @@ export class ProductService {
     const updated = await prisma.product.update({
       where: { id },
       data: updateData,
-      include: { category: true, inventories: true, sizes: { orderBy: { sortOrder: 'asc' } } },
+      include: {
+        category: true,
+        inventories: true,
+        sizes: { where: { colorId: null }, orderBy: { sortOrder: 'asc' } },
+        colors: {
+          orderBy: { sortOrder: 'asc' },
+          include: { sizes: { orderBy: { sortOrder: 'asc' } } },
+        },
+      },
     });
 
     // Bust all product caches AND the homepage slider (isFeatured may have changed)
