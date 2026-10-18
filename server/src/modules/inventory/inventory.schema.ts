@@ -20,7 +20,11 @@ export const adjustStockSchema = z.object({
   })).optional(),
   colors: z.array(z.object({
     name: z.string(),
-    quantity: z.coerce.number().int().nonnegative(),
+    quantity: z.coerce.number().int().nonnegative().optional(),
+    sizes: z.array(z.object({
+      name: z.string(),
+      quantity: z.coerce.number().int().nonnegative(),
+    })).optional(),
   })).optional(),
 });
 

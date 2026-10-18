@@ -43,6 +43,8 @@ export function useDashboardData() {
         warehouse: item.warehouse || t.na,
         sold: item.unitsSold || 0,
         manualSold: 0,
+        sizes: item.sizes || item.product?.sizes || [],
+        colors: item.colors || item.product?.colors || [],
         status: (item.currentStock ?? item.quantity ?? item.availableQty ?? 0) <= 0
           ? 'out'
           : lowStockIds.has(item.productId || item.product?.id) || (item.currentStock ?? item.quantity ?? item.availableQty ?? 0) <= (item.lowStockThreshold || 10)
@@ -55,17 +57,24 @@ export function useDashboardData() {
 
   useEffect(() => {
     if (Array.isArray(manualSalesData) && !manualSalesLoading) {
-      const transformedLog: SellLog[] = manualSalesData.slice(0, 50).map((sale: any, index: number) => ({
-        id: sale.saleNumber || String(sale.id || index),
-        product: sale.items?.length > 1
-          ? `${sale.items[0]?.productNameSnapshot || t.saleItem} +${sale.items.length - 1} ${t.more}`
-          : sale.items?.[0]?.productNameSnapshot || t.saleItem,
-        qty: sale.totalQty || 0,
-        amount: sale.totalAmount || 0,
-        note: sale.note || `${t.manualSale} · ${sale.branchName || t.main}`,
-        date: sale.createdAt ? new Date(sale.createdAt).toLocaleDateString() : new Date().toLocaleDateString(),
-        by: sale.branchName ? `${sale.soldBy || t.staff} · ${sale.branchName}` : (sale.soldBy || t.staff),
-      }));
+      const transformedLog: SellLog[] = manualSalesData.slice(0, 50).map((sale: any, index: number) => {
+        const firstItem = sale.items?.[0];
+        const variantLabel = [firstItem?.colorName, firstItem?.sizeName].filter(Boolean).join(' / ');
+        const itemDisplayName = firstItem?.productNameSnapshot
+          ? (variantLabel ? `${firstItem.productNameSnapshot} (${variantLabel})` : firstItem.productNameSnapshot)
+          : t.saleItem;
+        return {
+          id: sale.saleNumber || String(sale.id || index),
+          product: sale.items?.length > 1
+            ? `${itemDisplayName} +${sale.items.length - 1} ${t.more}`
+            : itemDisplayName,
+          qty: sale.totalQty || 0,
+          amount: sale.totalAmount || 0,
+          note: sale.note || `${t.manualSale} · ${sale.branchName || t.main}`,
+          date: sale.createdAt ? new Date(sale.createdAt).toLocaleDateString() : new Date().toLocaleDateString(),
+          by: sale.branchName ? `${sale.soldBy || t.staff} · ${sale.branchName}` : (sale.soldBy || t.staff),
+        };
+      });
       setSellLog(transformedLog);
     }
   }, [manualSalesData, manualSalesLoading, t]);

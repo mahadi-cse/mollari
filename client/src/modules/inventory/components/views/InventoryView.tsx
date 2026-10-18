@@ -39,6 +39,8 @@ export default function InventoryView({
   const [batchName, setBatchName] = useState('');
   const [mfgDate, setMfgDate] = useState('');
   const [expDate, setExpDate] = useState('');
+  const [formColorName, setFormColorName] = useState('');
+  const [colorSizeStocks, setColorSizeStocks] = useState<Record<string, string>>({});
   const [formSizeName, setFormSizeName] = useState('');
   const [sizeStocks, setSizeStocks] = useState<Record<string, string>>({});
   const [sizeAdjustmentMode, setSizeAdjustmentMode] = useState<'all' | 'single'>('all');
@@ -71,7 +73,8 @@ export default function InventoryView({
       name: item.product?.name || t.unknownProduct,
       sku: item.product?.sku || t.na,
       stock: item.availableQty ?? item.quantity ?? 0,
-      sizes: item.product?.sizes || [],
+      sizes: item.product?.sizes || item.sizes || [],
+      colors: item.product?.colors || item.colors || [],
       branchId: resolveBranchId(item),
       warehouse: item.warehouse || t.na,
       status: 'active',
@@ -92,6 +95,7 @@ export default function InventoryView({
       ...cachedMeta,
       ...liveProd,
       sizes: (liveProd.sizes && liveProd.sizes.length > 0) ? liveProd.sizes : (cachedMeta?.sizes || []),
+      colors: (liveProd.colors && liveProd.colors.length > 0) ? liveProd.colors : (cachedMeta?.colors || []),
     };
   };
   const viewProducts = branchProducts;
@@ -104,11 +108,22 @@ export default function InventoryView({
     const q = productQuery.trim().toLowerCase();
     if (!q) return modalProducts.slice(0, 50);
     return modalProducts
-      .filter((p: any) =>
-        p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)
-      )
+      .filter((p: any) => {
+        const meta = getProductMeta(p.id) || p;
+        const sizes: any[] = (p.sizes && p.sizes.length > 0) ? p.sizes : (meta?.sizes || []);
+        const colors: any[] = (p.colors && p.colors.length > 0) ? p.colors : (meta?.colors || []);
+        return (
+          p.name.toLowerCase().includes(q) ||
+          p.sku.toLowerCase().includes(q) ||
+          sizes.some((s: any) => s.name?.toLowerCase().includes(q)) ||
+          colors.some((c: any) =>
+            c.name?.toLowerCase().includes(q) ||
+            c.sizes?.some((cs: any) => cs.name?.toLowerCase().includes(q))
+          )
+        );
+      })
       .slice(0, 50);
-  }, [formBranchId, modalProducts, productQuery]);
+  }, [formBranchId, modalProducts, productQuery, productsWithSizes]);
 
   // Helper functions
   const getStatus = (stock: number) => {
@@ -138,13 +153,24 @@ export default function InventoryView({
   // Filter products based on search and filter
   const filteredProducts = useMemo(() => {
     return branchProducts.filter((p: any) => {
-      const matchSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         p.sku.toLowerCase().includes(searchQuery.toLowerCase());
+      const q = searchQuery.toLowerCase().trim();
+      const meta = getProductMeta(p.id) || p;
+      const sizes: any[] = (p.sizes && p.sizes.length > 0) ? p.sizes : (meta?.sizes || []);
+      const colors: any[] = (p.colors && p.colors.length > 0) ? p.colors : (meta?.colors || []);
+      const matchSearch =
+        !q ||
+        p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        sizes.some((s: any) => s.name?.toLowerCase().includes(q)) ||
+        colors.some((c: any) =>
+          c.name?.toLowerCase().includes(q) ||
+          c.sizes?.some((cs: any) => cs.name?.toLowerCase().includes(q))
+        );
       const status = getStatus(p.stock);
       const matchFilter = activeFilter === 'all' || status === activeFilter;
       return matchSearch && matchFilter;
     });
-  }, [branchProducts, searchQuery, activeFilter]);
+  }, [branchProducts, searchQuery, activeFilter, productsWithSizes]);
 
   // Calculate summary stats
   const summaryStats = useMemo(() => {
@@ -156,12 +182,37 @@ export default function InventoryView({
     };
   }, [branchProducts]);
 
-  const totalSizeStocksSum = useMemo(() => {
-    return Object.values(sizeStocks).reduce((sum, val) => {
-      const q = parseInt(val, 10);
-      return sum + (isNaN(q) ? 0 : Math.max(0, q));
-    }, 0);
-  }, [sizeStocks]);
+  const totalVariantStocksSum = useMemo(() => {
+    if (!formProductId) return 0;
+    const meta = getProductMeta(parseInt(formProductId));
+    const colors: any[] = (meta as any)?.colors || [];
+    if (colors.length > 0) {
+      let sum = 0;
+      colors.forEach((c: any) => {
+        if (c.sizes && c.sizes.length > 0) {
+          c.sizes.forEach((s: any) => {
+            const key = `${c.name}:::${s.name}`;
+            const val = colorSizeStocks[key] !== undefined ? colorSizeStocks[key] : (s.quantity ?? 0).toString();
+            const q = parseInt(val, 10);
+            sum += isNaN(q) ? 0 : Math.max(0, q);
+          });
+        } else {
+          const val = colorSizeStocks[c.name] !== undefined ? colorSizeStocks[c.name] : (c.quantity ?? 0).toString();
+          const q = parseInt(val, 10);
+          sum += isNaN(q) ? 0 : Math.max(0, q);
+        }
+      });
+      return sum;
+    }
+    const sizes: any[] = (meta as any)?.sizes || [];
+    if (sizes.length > 0) {
+      return Object.values(sizeStocks).reduce((sum, val) => {
+        const q = parseInt(val, 10);
+        return sum + (isNaN(q) ? 0 : Math.max(0, q));
+      }, 0);
+    }
+    return 0;
+  }, [formProductId, colorSizeStocks, sizeStocks, branchProducts, allProducts, productsWithSizes]);
 
   const selectedProduct = modalProducts.find((p: any) => p.id === parseInt(formProductId));
 
@@ -177,10 +228,121 @@ export default function InventoryView({
 
     const productId = parseInt(formProductId);
     const meta = getProductMeta(productId);
+    const productColors = (meta as any)?.colors || [];
     const productSizes = (meta as any)?.sizes || [];
+    const hasColors = productColors.length > 0;
     const hasSizes = productSizes.length > 0;
 
-    // 1. All Sizes Mode
+    // 1. Product has colors: All Variants Mode
+    if (hasColors && sizeAdjustmentMode === 'all') {
+      const formattedColors = productColors.map((c: any) => {
+        const hasColorSizes = c.sizes && c.sizes.length > 0;
+        if (hasColorSizes) {
+          const formattedSizes = c.sizes.map((s: any) => {
+            const key = `${c.name}:::${s.name}`;
+            const val = colorSizeStocks[key] !== undefined ? colorSizeStocks[key] : (s.quantity ?? 0).toString();
+            return {
+              name: s.name,
+              quantity: Math.max(0, parseInt(val, 10) || 0),
+            };
+          });
+          const totalColStock = formattedSizes.reduce((sum: number, s: any) => sum + s.quantity, 0);
+          return {
+            name: c.name,
+            quantity: totalColStock,
+            sizes: formattedSizes,
+          };
+        } else {
+          const val = colorSizeStocks[c.name] !== undefined ? colorSizeStocks[c.name] : (c.quantity ?? 0).toString();
+          return {
+            name: c.name,
+            quantity: Math.max(0, parseInt(val, 10) || 0),
+          };
+        }
+      });
+
+      const newTotalStock = formattedColors.reduce((sum: number, c: any) => sum + (c.quantity || 0), 0);
+      const currentStock = selectedProduct?.stock || 0;
+      const quantityChange = newTotalStock - currentStock;
+
+      try {
+        await adjustStockMutation.mutateAsync({
+          productId,
+          quantity: quantityChange,
+          type: 'ADJUSTMENT',
+          warehouseId: Number(formBranchId),
+          notes: `Batch color & size stock update from inventory [Total: ${newTotalStock}]`,
+          colors: formattedColors,
+        });
+        toast.success(t.inventory.stockUpdated);
+        setModalOpen(false);
+      } catch {
+        toast.error(t.inventory.failedUpdate);
+      }
+      return;
+    }
+
+    // 2. Product has colors: Single Variant Mode
+    if (hasColors && sizeAdjustmentMode === 'single') {
+      const enteredValue = parseInt(formStockValue);
+      if (isNaN(enteredValue) || enteredValue < 0 || !selectedProduct) {
+        toast.error('Please enter a valid stock quantity');
+        return;
+      }
+
+      const targetColor = productColors.find((c: any) => c.name === formColorName) || productColors[0];
+      const hasColorSizes = targetColor?.sizes && targetColor.sizes.length > 0;
+      let quantityChange = 0;
+
+      if (hasColorSizes && formSizeName) {
+        const targetSize = targetColor.sizes.find((s: any) => s.name === formSizeName);
+        const currentVariantStock = targetSize?.quantity ?? 0;
+        quantityChange = formMode === 'set' ? enteredValue - currentVariantStock : enteredValue;
+      } else {
+        const currentVariantStock = targetColor?.quantity ?? 0;
+        quantityChange = formMode === 'set' ? enteredValue - currentVariantStock : enteredValue;
+      }
+
+      if (quantityChange === 0) {
+        setModalOpen(false);
+        setFormStockValue('');
+        return;
+      }
+
+      try {
+        await adjustStockMutation.mutateAsync({
+          productId,
+          quantity: quantityChange,
+          type: 'ADJUSTMENT',
+          warehouseId: Number(formBranchId),
+          notes: formMode === 'set'
+            ? `Manual set stock [${targetColor?.name}${formSizeName ? ` / ${formSizeName}` : ''}]`
+            : `Manual add stock [${targetColor?.name}${formSizeName ? ` / ${formSizeName}` : ''}]`,
+          colorName: targetColor?.name,
+          ...(formSizeName ? { sizeName: formSizeName } : {}),
+          ...(formMode === 'add' && quantityChange > 0
+            ? {
+                batchName: batchName || undefined,
+                manufactureDate: mfgDate ? new Date(mfgDate).toISOString() : undefined,
+                expiryDate: expDate ? new Date(expDate).toISOString() : undefined,
+              }
+            : {}),
+        });
+        toast.success(t.inventory.stockUpdated);
+        setFormStockValue('');
+        setBatchName('');
+        setMfgDate('');
+        setExpDate('');
+        setFormColorName('');
+        setFormSizeName('');
+        setModalOpen(false);
+      } catch {
+        toast.error(t.inventory.failedUpdate);
+      }
+      return;
+    }
+
+    // 3. Standalone sizes: All Sizes Mode
     if (hasSizes && sizeAdjustmentMode === 'all') {
       const formattedSizes = productSizes.map((s: any) => ({
         name: s.name,
@@ -207,9 +369,10 @@ export default function InventoryView({
       return;
     }
 
-    // 2. Single Size or Regular Product
+    // 4. Standalone sizes (Single Mode) or Standard Product
     const enteredValue = parseInt(formStockValue);
     if (isNaN(enteredValue) || enteredValue < 0 || !selectedProduct) {
+      toast.error('Please enter a valid stock quantity');
       return;
     }
 
@@ -269,7 +432,9 @@ export default function InventoryView({
     setBatchName('');
     setMfgDate('');
     setExpDate('');
+    setFormColorName('');
     setFormSizeName('');
+    setColorSizeStocks({});
     setSizeStocks({});
     setSizeAdjustmentMode('all');
     setModalOpen(true);
@@ -291,7 +456,9 @@ export default function InventoryView({
     if (!exists) {
       setFormProductId('');
       setProductQuery('');
+      setColorSizeStocks({});
       setSizeStocks({});
+      setFormColorName('');
       setFormSizeName('');
     }
   }, [formBranchId, formProductId, modalProducts]);
@@ -299,19 +466,48 @@ export default function InventoryView({
   React.useEffect(() => {
     if (formProductId) {
       const meta = getProductMeta(parseInt(formProductId));
+      const colors = (meta as any)?.colors || [];
       const sizes = (meta as any)?.sizes || [];
-      if (sizes.length > 0) {
+
+      if (colors.length > 0) {
+        const initColorSizes: Record<string, string> = {};
+        colors.forEach((c: any) => {
+          if (c.sizes && c.sizes.length > 0) {
+            c.sizes.forEach((s: any) => {
+              initColorSizes[`${c.name}:::${s.name}`] = (s.quantity && s.quantity > 0) ? s.quantity.toString() : '';
+            });
+          } else {
+            initColorSizes[c.name] = (c.quantity && c.quantity > 0) ? c.quantity.toString() : '';
+          }
+        });
+        setColorSizeStocks(initColorSizes);
+        setSizeStocks({});
+        const defaultCol = colors.find((c: any) => c.name === formColorName) || colors[0];
+        setFormColorName(defaultCol?.name || '');
+        if (defaultCol?.sizes && defaultCol.sizes.length > 0) {
+          const defaultSz = defaultCol.sizes.find((s: any) => s.name === formSizeName) || defaultCol.sizes[0];
+          setFormSizeName(defaultSz?.name || '');
+          setFormStockValue((defaultSz?.quantity && defaultSz.quantity > 0) ? defaultSz.quantity.toString() : '');
+        } else {
+          setFormSizeName('');
+          setFormStockValue((defaultCol?.quantity && defaultCol.quantity > 0) ? defaultCol.quantity.toString() : '');
+        }
+      } else if (sizes.length > 0) {
         const initSizes: Record<string, string> = {};
         sizes.forEach((s: any) => {
           initSizes[s.name] = (s.quantity && s.quantity > 0) ? s.quantity.toString() : '';
         });
         setSizeStocks(initSizes);
+        setColorSizeStocks({});
+        setFormColorName('');
         if (!formSizeName || !sizes.some((s: any) => s.name === formSizeName)) {
           setFormSizeName(sizes[0]?.name || '');
           setFormStockValue((sizes[0]?.quantity && sizes[0].quantity > 0) ? sizes[0].quantity.toString() : '');
         }
       } else {
+        setColorSizeStocks({});
         setSizeStocks({});
+        setFormColorName('');
         setFormSizeName('');
       }
     }
@@ -519,7 +715,7 @@ export default function InventoryView({
                       padding: '8px 12px',
                       textAlign: 'left',
                       borderBottom: `1px solid ${Theme.border}`,
-                      width: '40%',
+                      width: '32%',
                     }}
                   >
                     {t.inventory.product}
@@ -534,10 +730,10 @@ export default function InventoryView({
                       padding: '8px 12px',
                       textAlign: 'left',
                       borderBottom: `1px solid ${Theme.border}`,
-                      width: '12%',
+                      width: '32%',
                     }}
                   >
-                    {t.inventory.stock}
+                    {t.inventory.stock} & {t.inventory.sizeBreakdown || 'Variants'}
                   </th>
                   <th
                     style={{
@@ -549,7 +745,7 @@ export default function InventoryView({
                       padding: '8px 12px',
                       textAlign: 'left',
                       borderBottom: `1px solid ${Theme.border}`,
-                      width: '14%',
+                      width: '12%',
                     }}
                   >
                     {t.inventory.status}
@@ -565,7 +761,7 @@ export default function InventoryView({
                       padding: '8px 12px',
                       textAlign: 'right',
                       borderBottom: `1px solid ${Theme.border}`,
-                      width: '14%',
+                      width: '12%',
                     }}
                   >
                     {t.inventory.batchExp}
@@ -580,7 +776,7 @@ export default function InventoryView({
                       padding: '8px 12px',
                       textAlign: 'right',
                       borderBottom: `1px solid ${Theme.border}`,
-                      width: '6%',
+                      width: '12%',
                     }}
                   />
                 </tr>
@@ -588,6 +784,12 @@ export default function InventoryView({
               <tbody>
                 {filteredProducts.map((p: any) => {
                   const status = getStatus(p.stock);
+                  const meta = (p.sizes && p.sizes.length > 0) || (p.colors && p.colors.length > 0)
+                    ? p
+                    : (getProductMeta(p.id) || p);
+                  const colors: any[] = (meta as any)?.colors || [];
+                  const sizes: any[] = (meta as any)?.sizes || [];
+
                   return (
                     <tr
                       key={p.id}
@@ -599,7 +801,7 @@ export default function InventoryView({
                     >
                       <td
                         style={{
-                          padding: '10px 12px',
+                          padding: '12px 12px',
                           borderBottom: `1px solid ${Theme.border}`,
                           verticalAlign: 'middle',
                           fontSize: '13px',
@@ -607,51 +809,115 @@ export default function InventoryView({
                         }}
                       >
                         <div>
-                          <div style={{ fontWeight: 500 }}>{p.name}</div>
-                          <div style={{ fontSize: '11px', color: Theme.mutedFg, marginTop: '2px', fontFamily: 'monospace' }}>
-                            {p.sku}
+                          <div style={{ fontWeight: 600, fontSize: '13.5px' }}>{p.name}</div>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                            <span style={{ fontSize: '11px', color: Theme.mutedFg, fontFamily: 'monospace' }}>
+                              {p.sku}
+                            </span>
+                            {colors.length > 0 && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                                {colors.length} {colors.length === 1 ? 'color' : 'colors'}
+                              </span>
+                            )}
+                            {sizes.length > 0 && colors.length === 0 && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-pink-50 text-pink-700 border border-pink-200">
+                                {sizes.length} {sizes.length === 1 ? 'size' : 'sizes'}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </td>
                       <td
                         style={{
-                          padding: '10px 12px',
+                          padding: '12px 12px',
                           borderBottom: `1px solid ${Theme.border}`,
                           verticalAlign: 'middle',
-                          fontSize: '14px',
-                          fontWeight: 500,
+                          fontSize: '13px',
                           color: getStatusColor(status),
                         }}
                       >
                         <div>
-                          <span className="font-bold text-[14px]">{p.stock}</span>
-                          {(() => {
-                            const sizes = (p.sizes && p.sizes.length > 0) ? p.sizes : ((getProductMeta(p.id) as any)?.sizes || []);
-                            if (sizes.length === 0) return null;
-                            return (
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {sizes.map((s: any) => (
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="font-extrabold text-[15px]">{p.stock}</span>
+                            <span className="text-[11px] font-medium" style={{ color: Theme.mutedFg }}>
+                              {t.inventory.units}
+                            </span>
+                          </div>
+
+                          {/* Colored Variants Breakdown */}
+                          {colors.length > 0 && (
+                            <div className="mt-1.5 flex flex-col gap-1.5">
+                              {colors.map((c: any) => {
+                                const hasColorSizes = c.sizes && c.sizes.length > 0;
+                                const colStock = hasColorSizes
+                                  ? c.sizes.reduce((sum: number, s: any) => sum + (Number(s.quantity) || 0), 0)
+                                  : (c.quantity ?? 0);
+                                return (
+                                  <div key={c.id || c.name} className="flex flex-wrap items-center gap-1.5">
+                                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                                      {c.hexCode && (
+                                        <span
+                                          className="w-2 h-2 rounded-full border border-black/15 shrink-0"
+                                          style={{ backgroundColor: c.hexCode }}
+                                        />
+                                      )}
+                                      <span>{c.name}</span>
+                                      {!hasColorSizes && <span className="font-bold">({colStock})</span>}
+                                    </span>
+                                    {hasColorSizes && (
+                                      <div className="flex flex-wrap items-center gap-1">
+                                        {c.sizes.map((s: any) => {
+                                          const sQty = Number(s.quantity) || 0;
+                                          return (
+                                            <span
+                                              key={s.id || s.name}
+                                              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium border"
+                                              style={{
+                                                background: sQty === 0 ? '#FCEBEB' : sQty <= 5 ? '#FAEEDA' : '#FDF2F8',
+                                                color: sQty === 0 ? '#A32D2D' : sQty <= 5 ? '#854F0B' : '#BE185D',
+                                                borderColor: sQty === 0 ? '#F87171' : sQty <= 5 ? '#FBBF24' : '#FBCFE8',
+                                              }}
+                                            >
+                                              <span>{s.name}:</span>
+                                              <span className="font-bold">{sQty}</span>
+                                            </span>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Standalone Sizes Breakdown */}
+                          {colors.length === 0 && sizes.length > 0 && (
+                            <div className="mt-1.5 flex flex-wrap gap-1">
+                              {sizes.map((s: any) => {
+                                const sQty = Number(s.quantity) || 0;
+                                return (
                                   <span
                                     key={s.id || s.name}
                                     className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium border"
                                     style={{
-                                      background: s.quantity === 0 ? '#FCEBEB' : s.quantity <= 5 ? '#FAEEDA' : '#F3F4F6',
-                                      color: s.quantity === 0 ? '#A32D2D' : s.quantity <= 5 ? '#854F0B' : '#374151',
-                                      borderColor: s.quantity === 0 ? '#F87171' : s.quantity <= 5 ? '#FBBF24' : '#E5E7EB',
+                                      background: sQty === 0 ? '#FCEBEB' : sQty <= 5 ? '#FAEEDA' : '#FDF2F8',
+                                      color: sQty === 0 ? '#A32D2D' : sQty <= 5 ? '#854F0B' : '#BE185D',
+                                      borderColor: sQty === 0 ? '#F87171' : sQty <= 5 ? '#FBBF24' : '#FBCFE8',
                                     }}
                                   >
                                     <span>{s.name}:</span>
-                                    <span className="font-bold">{s.quantity ?? 0}</span>
+                                    <span className="font-bold">{sQty}</span>
                                   </span>
-                                ))}
-                              </div>
-                            );
-                          })()}
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td
                         style={{
-                          padding: '10px 12px',
+                          padding: '12px 12px',
                           borderBottom: `1px solid ${Theme.border}`,
                           verticalAlign: 'middle',
                         }}
@@ -674,7 +940,7 @@ export default function InventoryView({
                       <td
                         className='hidden lg:table-cell'
                         style={{
-                          padding: '10px 12px',
+                          padding: '12px 12px',
                           borderBottom: `1px solid ${Theme.border}`,
                           verticalAlign: 'middle',
                           fontSize: '12px',
@@ -687,7 +953,7 @@ export default function InventoryView({
                       </td>
                       <td
                         style={{
-                          padding: '10px 12px',
+                          padding: '12px 12px',
                           borderBottom: `1px solid ${Theme.border}`,
                           verticalAlign: 'middle',
                           textAlign: 'right',
@@ -706,26 +972,51 @@ export default function InventoryView({
                             setMfgDate(p.rawMfgDate ? p.rawMfgDate.split('T')[0] : '');
                             setExpDate(p.rawExpDate ? p.rawExpDate.split('T')[0] : '');
 
-                            const meta = (p.sizes && p.sizes.length > 0) ? p : (getProductMeta(p.id) || p);
-                            const sizes = (meta as any)?.sizes || [];
-                            if (sizes.length > 0) {
+                            if (colors.length > 0) {
+                              const initColorSizes: Record<string, string> = {};
+                              colors.forEach((c: any) => {
+                                if (c.sizes && c.sizes.length > 0) {
+                                  c.sizes.forEach((s: any) => {
+                                    initColorSizes[`${c.name}:::${s.name}`] = (s.quantity && s.quantity > 0) ? s.quantity.toString() : '';
+                                  });
+                                } else {
+                                  initColorSizes[c.name] = (c.quantity && c.quantity > 0) ? c.quantity.toString() : '';
+                                }
+                              });
+                              setColorSizeStocks(initColorSizes);
+                              setSizeStocks({});
+                              const defaultCol = colors[0];
+                              setFormColorName(defaultCol?.name || '');
+                              if (defaultCol?.sizes && defaultCol.sizes.length > 0) {
+                                setFormSizeName(defaultCol.sizes[0]?.name || '');
+                                setFormStockValue((defaultCol.sizes[0]?.quantity && defaultCol.sizes[0].quantity > 0) ? defaultCol.sizes[0].quantity.toString() : '');
+                              } else {
+                                setFormSizeName('');
+                                setFormStockValue((defaultCol?.quantity && defaultCol.quantity > 0) ? defaultCol.quantity.toString() : '');
+                              }
+                              setSizeAdjustmentMode('all');
+                            } else if (sizes.length > 0) {
                               const initSizes: Record<string, string> = {};
                               sizes.forEach((s: any) => {
                                 initSizes[s.name] = (s.quantity && s.quantity > 0) ? s.quantity.toString() : '';
                               });
                               setSizeStocks(initSizes);
+                              setColorSizeStocks({});
+                              setFormColorName('');
                               setFormSizeName(sizes[0]?.name || '');
                               setFormStockValue((sizes[0]?.quantity && sizes[0].quantity > 0) ? sizes[0].quantity.toString() : '');
                               setSizeAdjustmentMode('all');
                             } else {
+                              setColorSizeStocks({});
                               setSizeStocks({});
+                              setFormColorName('');
                               setFormSizeName('');
                               setSizeAdjustmentMode('single');
                             }
 
                             setModalOpen(true);
                           }}
-                          className="cursor-pointer rounded border px-2 py-1 text-xs font-medium transition-all"
+                          className="cursor-pointer rounded border px-2 py-1 text-xs font-medium transition-all hover:bg-gray-50"
                           style={{
                             border: `1px solid ${Theme.border}`,
                             background: '#fff',
@@ -831,22 +1122,45 @@ export default function InventoryView({
                             {t.inventory.noProductsForBranch}
                           </div>
                         ) : (
-                          searchableModalProducts.map((p: any) => (
-                            <button
-                              key={`${p.id}-${p.branchId || 'na'}`}
-                              type="button"
-                              onClick={() => {
-                                setFormProductId(String(p.id));
-                                setProductQuery(`${p.name} (${p.sku})`);
-                                setShowProductDropdown(false);
-                              }}
-                              className="w-full cursor-pointer border-0 px-3 py-2 text-left text-[13px]"
-                              style={{ background: '#fff', color: Theme.fg }}
-                            >
-                              <div className="font-semibold">{p.name}</div>
-                              <div className="text-[11px]" style={{ color: Theme.mutedFg }}>{t.modal.sku}: {p.sku}</div>
-                            </button>
-                          ))
+                          searchableModalProducts.map((p: any) => {
+                            const meta = (p.sizes && p.sizes.length > 0) || (p.colors && p.colors.length > 0)
+                              ? p
+                              : (getProductMeta(p.id) || p);
+                            const pColors: any[] = (meta as any)?.colors || [];
+                            const pSizes: any[] = (meta as any)?.sizes || [];
+
+                            return (
+                              <button
+                                key={`${p.id}-${p.branchId || 'na'}`}
+                                type="button"
+                                onClick={() => {
+                                  setFormProductId(String(p.id));
+                                  setProductQuery(`${p.name} (${p.sku})`);
+                                  setShowProductDropdown(false);
+                                }}
+                                className="w-full cursor-pointer border-0 px-3 py-2 text-left text-[13px] hover:bg-pink-50/40 transition-colors"
+                                style={{ background: '#fff', color: Theme.fg }}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="font-semibold">{p.name}</div>
+                                  <div className="text-[11px] font-bold text-gray-500">{p.stock} units</div>
+                                </div>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-[11px]" style={{ color: Theme.mutedFg }}>{t.modal.sku}: {p.sku}</span>
+                                  {pColors.length > 0 && (
+                                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 font-semibold border border-purple-200">
+                                      {pColors.length} colors
+                                    </span>
+                                  )}
+                                  {pSizes.length > 0 && pColors.length === 0 && (
+                                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-pink-50 text-pink-700 font-semibold border border-pink-200">
+                                      {pSizes.length} sizes
+                                    </span>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })
                         )}
                       </div>
                     )}
@@ -881,11 +1195,15 @@ export default function InventoryView({
                 </div>
               </div>
 
-              {/* Product Size Management in Modal */}
+              {/* Product Size / Variant Management in Modal */}
               {(() => {
                 const meta = formProductId ? getProductMeta(parseInt(formProductId)) : null;
-                const sizes = (meta as any)?.sizes || [];
-                if (sizes.length === 0) {
+                const colors: any[] = (meta as any)?.colors || [];
+                const sizes: any[] = (meta as any)?.sizes || [];
+                const hasColors = colors.length > 0;
+                const hasSizes = sizes.length > 0;
+
+                if (!hasColors && !hasSizes) {
                   return (
                     <div className={`grid gap-3 ${isMobile ? 'grid-cols-1' : 'grid-cols-3'}`}>
                       <div>
@@ -957,7 +1275,321 @@ export default function InventoryView({
                   );
                 }
 
-                // PRODUCT HAS SIZES
+                // PRODUCT HAS COLORS (WITH OR WITHOUT NESTED SIZES)
+                if (hasColors) {
+                  return (
+                    <div className="mt-2 flex flex-col gap-3">
+                      {/* Mode Switcher: All Variants vs Single Variant */}
+                      <div className="flex items-center justify-between border-b pb-2" style={{ borderColor: Theme.border }}>
+                        <div className="text-xs font-bold uppercase tracking-[0.05em]" style={{ color: Theme.mutedFg }}>
+                          {t.inventory.colorBreakdown || 'Color & Size Breakdown'}
+                        </div>
+                        <div className="flex gap-1 rounded-lg p-[3px]" style={{ background: Theme.muted }}>
+                          <button
+                            type="button"
+                            onClick={() => setSizeAdjustmentMode('all')}
+                            className="cursor-pointer rounded-md border-none px-3 py-1.5 text-xs font-semibold"
+                            style={{
+                              background: sizeAdjustmentMode === 'all' ? '#fff' : 'transparent',
+                              color: sizeAdjustmentMode === 'all' ? Theme.primary : Theme.mutedFg,
+                              boxShadow: sizeAdjustmentMode === 'all' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                            }}
+                          >
+                            📋 {t.inventory.allSizes || 'All Variants'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSizeAdjustmentMode('single');
+                              const cName = formColorName || colors[0]?.name;
+                              setFormColorName(cName);
+                              const targetCol = colors.find((c: any) => c.name === cName) || colors[0];
+                              if (targetCol?.sizes && targetCol.sizes.length > 0) {
+                                const sName = formSizeName || targetCol.sizes[0]?.name;
+                                setFormSizeName(sName);
+                                const sObj = targetCol.sizes.find((s: any) => s.name === sName);
+                                setFormStockValue((sObj?.quantity ?? 0).toString());
+                              } else {
+                                setFormSizeName('');
+                                setFormStockValue((targetCol?.quantity ?? 0).toString());
+                              }
+                            }}
+                            className="cursor-pointer rounded-md border-none px-3 py-1.5 text-xs font-semibold"
+                            style={{
+                              background: sizeAdjustmentMode === 'single' ? '#fff' : 'transparent',
+                              color: sizeAdjustmentMode === 'single' ? Theme.primary : Theme.mutedFg,
+                              boxShadow: sizeAdjustmentMode === 'single' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                            }}
+                          >
+                            🎯 {t.inventory.sizeStock || 'Single Variant'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {sizeAdjustmentMode === 'all' ? (
+                        <div className="rounded-xl border p-3.5 bg-gray-50/50" style={{ borderColor: Theme.border }}>
+                          <div className="mb-2.5 text-xs text-muted-foreground">
+                            Enter stock for each color and size variant. Total stock will automatically equal the sum of all variants.
+                          </div>
+                          <div className="flex flex-col gap-3">
+                            {colors.map((c: any) => {
+                              const hasColorSizes = c.sizes && c.sizes.length > 0;
+                              return (
+                                <div key={c.name} className="p-3 rounded-lg bg-white border border-gray-200">
+                                  {/* Color Header */}
+                                  <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-gray-100">
+                                    {c.hexCode && (
+                                      <span
+                                        className="w-3 h-3 rounded-full border border-black/15 shrink-0"
+                                        style={{ backgroundColor: c.hexCode }}
+                                      />
+                                    )}
+                                    <span className="font-bold text-sm text-foreground">{c.name}</span>
+                                    <span className="text-[11px] text-muted-foreground ml-auto">
+                                      {hasColorSizes ? `${c.sizes.length} sizes` : `Current: ${c.quantity ?? 0} units`}
+                                    </span>
+                                  </div>
+
+                                  {/* Color Sizes or Single Color Input */}
+                                  {hasColorSizes ? (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                                      {c.sizes.map((s: any) => {
+                                        const key = `${c.name}:::${s.name}`;
+                                        return (
+                                          <div
+                                            key={key}
+                                            className="flex items-center justify-between gap-2 p-2 rounded bg-gray-50 border border-gray-100"
+                                          >
+                                            <div className="min-w-0">
+                                              <span className="font-semibold text-xs text-foreground">{s.name}</span>
+                                              <div className="text-[10px] text-muted-foreground">
+                                                Cur: <span className="font-bold text-gray-700">{s.quantity ?? 0}</span>
+                                              </div>
+                                            </div>
+                                            <div className="w-24">
+                                              <input
+                                                type="number"
+                                                min="0"
+                                                className="w-full box-border rounded border border-border bg-white px-2 py-1 text-xs text-foreground outline-none font-bold text-right"
+                                                value={
+                                                  colorSizeStocks[key] !== undefined
+                                                    ? colorSizeStocks[key]
+                                                    : (s.quantity && s.quantity > 0 ? s.quantity.toString() : '')
+                                                }
+                                                onChange={(e) => {
+                                                  const val = e.target.value;
+                                                  setColorSizeStocks((prev) => ({ ...prev, [key]: val }));
+                                                }}
+                                                onFocus={(e) => {
+                                                  if (e.target.value === '0') {
+                                                    setColorSizeStocks((prev) => ({ ...prev, [key]: '' }));
+                                                  }
+                                                }}
+                                                placeholder="0"
+                                              />
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-between gap-3 p-2 rounded bg-gray-50 border border-gray-100">
+                                      <div className="text-xs text-muted-foreground">
+                                        Current: <span className="font-bold text-gray-700">{c.quantity ?? 0}</span> units
+                                      </div>
+                                      <div className="w-32">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          className="w-full box-border rounded border border-border bg-white px-2.5 py-1 text-xs text-foreground outline-none font-bold text-right"
+                                          value={
+                                            colorSizeStocks[c.name] !== undefined
+                                              ? colorSizeStocks[c.name]
+                                              : (c.quantity && c.quantity > 0 ? c.quantity.toString() : '')
+                                          }
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setColorSizeStocks((prev) => ({ ...prev, [c.name]: val }));
+                                          }}
+                                          onFocus={(e) => {
+                                            if (e.target.value === '0') {
+                                              setColorSizeStocks((prev) => ({ ...prev, [c.name]: '' }));
+                                            }
+                                          }}
+                                          placeholder="0"
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Sum of all variants display */}
+                          <div className="mt-3 flex items-center justify-between p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900">
+                            <span className="text-xs font-bold">{t.inventory.totalSizesStock || 'Total Variant Stock'}:</span>
+                            <span className="text-base font-extrabold text-emerald-700">{totalVariantStocksSum} units</span>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Single Variant Adjustment Mode */
+                        <div className="flex flex-col gap-3">
+                          <div>
+                            <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.05em]" style={{ color: Theme.mutedFg }}>
+                              {t.inventory.color || 'Color'}
+                            </label>
+                            <div className="flex flex-wrap gap-2">
+                              {colors.map((c: any) => {
+                                const isSelected = (formColorName || colors[0]?.name) === c.name;
+                                return (
+                                  <button
+                                    key={c.name}
+                                    type="button"
+                                    onClick={() => {
+                                      setFormColorName(c.name);
+                                      if (c.sizes && c.sizes.length > 0) {
+                                        const nextSize = c.sizes[0];
+                                        setFormSizeName(nextSize?.name || '');
+                                        setFormStockValue((nextSize?.quantity && nextSize.quantity > 0) ? nextSize.quantity.toString() : '');
+                                      } else {
+                                        setFormSizeName('');
+                                        setFormStockValue((c.quantity && c.quantity > 0) ? c.quantity.toString() : '');
+                                      }
+                                    }}
+                                    className="rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+                                    style={{
+                                      borderColor: isSelected ? Theme.primary : Theme.border,
+                                      background: isSelected ? Theme.primary : '#fff',
+                                      color: isSelected ? '#fff' : Theme.fg,
+                                    }}
+                                  >
+                                    {c.hexCode && (
+                                      <span
+                                        className="w-2.5 h-2.5 rounded-full border border-black/15 shrink-0"
+                                        style={{ backgroundColor: c.hexCode }}
+                                      />
+                                    )}
+                                    <span>{c.name}</span>
+                                    <span className={`text-[10px] px-1 rounded ${isSelected ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'}`}>
+                                      {c.sizes && c.sizes.length > 0
+                                        ? c.sizes.reduce((sum: number, s: any) => sum + (s.quantity ?? 0), 0)
+                                        : (c.quantity ?? 0)}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* If selected color has sizes, pick size */}
+                          {(() => {
+                            const activeCol = colors.find((c: any) => c.name === (formColorName || colors[0]?.name));
+                            if (!activeCol?.sizes || activeCol.sizes.length === 0) return null;
+                            return (
+                              <div>
+                                <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.05em]" style={{ color: Theme.mutedFg }}>
+                                  {t.inventory.size || 'Size'}
+                                </label>
+                                <div className="flex flex-wrap gap-2">
+                                  {activeCol.sizes.map((s: any) => {
+                                    const isSizeSelected = formSizeName === s.name;
+                                    return (
+                                      <button
+                                        key={s.name}
+                                        type="button"
+                                        onClick={() => {
+                                          setFormSizeName(s.name);
+                                          setFormStockValue((s.quantity && s.quantity > 0) ? s.quantity.toString() : '');
+                                        }}
+                                        className="rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+                                        style={{
+                                          borderColor: isSizeSelected ? Theme.primary : Theme.border,
+                                          background: isSizeSelected ? Theme.primary : '#fff',
+                                          color: isSizeSelected ? '#fff' : Theme.fg,
+                                        }}
+                                      >
+                                        <span>{s.name}</span>
+                                        <span className={`text-[10px] px-1 rounded ${isSizeSelected ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'}`}>
+                                          {s.quantity ?? 0}
+                                        </span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          <div className={`grid gap-3 ${isMobile ? 'grid-cols-1' : 'grid-cols-3'}`}>
+                            <div>
+                              <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.05em]" style={{ color: Theme.mutedFg }}>
+                                {t.inventory.mode}
+                              </label>
+                              <div className="flex gap-1 rounded-lg p-[3px]" style={{ background: Theme.muted }}>
+                                {(['set', 'add'] as const).map((mode) => (
+                                  <button
+                                    key={mode}
+                                    type="button"
+                                    onClick={() => setFormMode(mode)}
+                                    className="flex-1 cursor-pointer rounded-md border-none px-2 py-2 text-xs font-semibold capitalize"
+                                    style={{
+                                      background: formMode === mode ? '#fff' : 'transparent',
+                                      color: formMode === mode ? Theme.primary : Theme.mutedFg,
+                                      boxShadow: formMode === mode ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                                    }}
+                                  >
+                                    {mode === 'set' ? `🔢 ${t.inventory.setStock}` : `➕ ${t.inventory.addToStock}`}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.05em]" style={{ color: Theme.mutedFg }}>
+                                {formMode === 'set' ? t.inventory.newStock : t.inventory.addQuantity}
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={formStockValue}
+                                onChange={(e) => setFormStockValue(e.target.value)}
+                                placeholder={formMode === 'set' ? 'e.g., 50' : 'e.g., 10'}
+                                className="w-full rounded-lg px-3 py-2.5 text-[13px] outline-none"
+                                style={{ border: `1px solid ${Theme.border}`, color: Theme.fg }}
+                              />
+                            </div>
+
+                            <div>
+                              <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.05em]" style={{ color: Theme.mutedFg }}>
+                                Current Stock
+                              </label>
+                              <div
+                                className="rounded-lg px-3 py-2.5 text-[13px] font-bold"
+                                style={{
+                                  border: `1px solid ${Theme.border}`,
+                                  color: Theme.primary,
+                                  background: Theme.muted,
+                                }}
+                              >
+                                {(() => {
+                                  const activeCol = colors.find((c: any) => c.name === (formColorName || colors[0]?.name));
+                                  if (activeCol?.sizes && activeCol.sizes.length > 0) {
+                                    const sz = activeCol.sizes.find((s: any) => s.name === formSizeName) || activeCol.sizes[0];
+                                    return `${sz?.quantity ?? 0} units`;
+                                  }
+                                  return `${activeCol?.quantity ?? 0} units`;
+                                })()}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                // PRODUCT HAS STANDALONE SIZES (NO COLORS)
                 return (
                   <div className="mt-2 flex flex-col gap-3">
                     {/* Size Adjustment Mode Switcher */}
@@ -1039,7 +1671,7 @@ export default function InventoryView({
                         {/* Sum of all sizes display */}
                         <div className="mt-3 flex items-center justify-between p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900">
                           <span className="text-xs font-bold">{t.inventory.totalSizesStock || 'Total Stock (Sum of Sizes)'}:</span>
-                          <span className="text-base font-extrabold text-emerald-700">{totalSizeStocksSum} units</span>
+                          <span className="text-base font-extrabold text-emerald-700">{totalVariantStocksSum} units</span>
                         </div>
                       </div>
                     ) : (
@@ -1190,8 +1822,11 @@ export default function InventoryView({
               <Btn onClick={handleFormSubmit} className="mt-3.5 w-full" disabled={adjustStockMutation.isPending}>
                 ✓ {(() => {
                   const meta = formProductId ? getProductMeta(parseInt(formProductId)) : null;
+                  const hasColors = ((meta as any)?.colors || []).length > 0;
                   const hasSizes = ((meta as any)?.sizes || []).length > 0;
-                  if (hasSizes && sizeAdjustmentMode === 'all') return `Save Size Stocks (Total: ${totalSizeStocksSum} units)`;
+                  if ((hasColors || hasSizes) && sizeAdjustmentMode === 'all') {
+                    return `Save Variant Stocks (Total: ${totalVariantStocksSum} units)`;
+                  }
                   return formMode === 'set' ? t.inventory.setStock : t.inventory.addToStock;
                 })()}
               </Btn>

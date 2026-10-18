@@ -210,16 +210,39 @@ export class InventoryService {
       } else if (data.sizes && data.sizes.length > 0) {
         for (const s of data.sizes) {
           await tx.productSize.updateMany({
-            where: { productId: data.productId, name: s.name },
+            where: { productId: data.productId, colorId: null, name: s.name },
             data: { quantity: Math.max(0, s.quantity) },
           });
         }
       } else if (data.colors && data.colors.length > 0) {
         for (const c of data.colors) {
-          await tx.productColor.updateMany({
+          const colorRecord = await tx.productColor.findFirst({
             where: { productId: data.productId, name: c.name },
-            data: { quantity: Math.max(0, c.quantity) },
+            include: { sizes: true },
           });
+          if (colorRecord) {
+            if (c.sizes && c.sizes.length > 0) {
+              for (const s of c.sizes) {
+                const targetSize = colorRecord.sizes.find((sz) => sz.name === s.name);
+                if (targetSize) {
+                  await tx.productSize.update({
+                    where: { id: targetSize.id },
+                    data: { quantity: Math.max(0, s.quantity) },
+                  });
+                }
+              }
+              const totalColSizeQty = c.sizes.reduce((sum, sz) => sum + Math.max(0, sz.quantity), 0);
+              await tx.productColor.update({
+                where: { id: colorRecord.id },
+                data: { quantity: totalColSizeQty },
+              });
+            } else if (c.quantity !== undefined) {
+              await tx.productColor.update({
+                where: { id: colorRecord.id },
+                data: { quantity: Math.max(0, c.quantity) },
+              });
+            }
+          }
         }
       }
 
@@ -362,7 +385,20 @@ export class InventoryService {
     const [data, total] = await Promise.all([
       prisma.inventory.findMany({
         where,
-        include: { product: true, branch: true },
+        include: {
+          product: {
+            include: {
+              sizes: { where: { colorId: null }, orderBy: { sortOrder: 'asc' } },
+              colors: {
+                orderBy: { sortOrder: 'asc' },
+                include: {
+                  sizes: { orderBy: { sortOrder: 'asc' } },
+                },
+              },
+            },
+          },
+          branch: true,
+        },
         skip,
         take,
         orderBy: { quantity: 'asc' },
@@ -379,6 +415,8 @@ export class InventoryService {
         lowStockThreshold: inv.lowStockThreshold,
         reorderPoint: inv.reorderPoint,
         warehouse: inv.branch?.name || 'Main',
+        sizes: inv.product.sizes,
+        colors: inv.product.colors,
       })),
       total,
       page,

@@ -11,6 +11,25 @@ export interface Inventory {
   reorderLevel: number;
   createdAt?: string;
   updatedAt?: string;
+  product?: {
+    id: number;
+    name: string;
+    sku: string;
+    price?: number;
+    unitType?: string;
+    unitLabel?: string;
+    sizes?: any[];
+    colors?: any[];
+  };
+  sizes?: any[];
+  colors?: any[];
+  warehouseId?: number;
+  warehouse?: string;
+  availableQty?: number;
+  reservedQty?: number;
+  batchName?: string;
+  manufactureDate?: string;
+  expiryDate?: string;
 }
 
 export interface InventoryTransaction {

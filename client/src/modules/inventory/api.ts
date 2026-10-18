@@ -23,7 +23,11 @@ export interface AdjustStockRequest {
   sizeName?: string;
   colorName?: string;
   sizes?: Array<{ name: string; quantity: number }>;
-  colors?: Array<{ name: string; quantity: number }>;
+  colors?: Array<{
+    name: string;
+    quantity?: number;
+    sizes?: Array<{ name: string; quantity: number }>;
+  }>;
 }
 
 export interface TransferStockRequest {

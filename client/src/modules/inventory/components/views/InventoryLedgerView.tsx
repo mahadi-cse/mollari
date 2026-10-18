@@ -166,6 +166,7 @@ export default function InventoryLedgerView({ initialBranchId, initialSearchQuer
         'Reference #',
         'Product Name',
         'SKU',
+        'Color',
         'Size',
         'Branch',
         'Movement Type',
@@ -180,6 +181,7 @@ export default function InventoryLedgerView({ initialBranchId, initialSearchQuer
         `"${(item.reference || '').replace(/"/g, '""')}"`,
         `"${(item.productName || '').replace(/"/g, '""')}"`,
         `"${(item.productSku || '').replace(/"/g, '""')}"`,
+        `"${(item.colorName || '-').replace(/"/g, '""')}"`,
         `"${(item.sizeName || '-').replace(/"/g, '""')}"`,
         `"${(item.branchName || '').replace(/"/g, '""')}"`,
         `"${item.type}"`,
@@ -639,7 +641,7 @@ export default function InventoryLedgerView({ initialBranchId, initialSearchQuer
                       width: '8%',
                     }}
                   >
-                    {t.inventory.size}
+                    {t.inventory.variant || 'Variant / Size'}
                   </th>
                   <th
                     style={{
@@ -800,7 +802,7 @@ export default function InventoryLedgerView({ initialBranchId, initialSearchQuer
                         </div>
                       </td>
 
-                      {/* Size */}
+                      {/* Size / Variant */}
                       <td
                         style={{
                           padding: '12px 12px',
@@ -808,21 +810,36 @@ export default function InventoryLedgerView({ initialBranchId, initialSearchQuer
                           textAlign: 'center',
                         }}
                       >
-                        {item.sizeName ? (
-                          <button
-                            type="button"
-                            title={`${t.inventory.filterBySize}: ${item.sizeName}`}
-                            onClick={() => {
-                              setSearchQuery(item.sizeName!);
-                              setPage(1);
-                            }}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-bold text-[11px] bg-pink-50 text-pink-700 border border-pink-200 shadow-2xs hover:bg-pink-100 transition-colors cursor-pointer"
-                          >
-                            {item.sizeName}
-                          </button>
-                        ) : (
-                          <span className="text-gray-300 text-xs font-mono">-</span>
-                        )}
+                        <div className="flex flex-col items-center justify-center gap-1">
+                          {item.colorName && (
+                            <button
+                              type="button"
+                              title={`${t.inventory.filterByColor || 'Filter by color'}: ${item.colorName}`}
+                              onClick={() => {
+                                setSearchQuery(item.colorName!);
+                                setPage(1);
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-semibold text-[10px] bg-purple-50 text-purple-700 border border-purple-200 shadow-2xs hover:bg-purple-100 transition-colors cursor-pointer"
+                            >
+                              <span>🎨 {item.colorName}</span>
+                            </button>
+                          )}
+                          {item.sizeName ? (
+                            <button
+                              type="button"
+                              title={`${t.inventory.filterBySize || 'Filter by size'}: ${item.sizeName}`}
+                              onClick={() => {
+                                setSearchQuery(item.sizeName!);
+                                setPage(1);
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-bold text-[11px] bg-pink-50 text-pink-700 border border-pink-200 shadow-2xs hover:bg-pink-100 transition-colors cursor-pointer"
+                            >
+                              {item.sizeName}
+                            </button>
+                          ) : !item.colorName ? (
+                            <span className="text-gray-300 text-xs font-mono">-</span>
+                          ) : null}
+                        </div>
                       </td>
 
                       {/* Branch */}
