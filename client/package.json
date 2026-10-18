@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
@@ -13,7 +13,7 @@
     "axios": "^1.14.0",
     "browser-image-compression": "^2.0.2",
     "file-saver": "^2.0.5",
-    "framer-motion": "^12.38.0",
+    "framer-motion": "^12.43.0",
     "html5-qrcode": "^2.3.8",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
