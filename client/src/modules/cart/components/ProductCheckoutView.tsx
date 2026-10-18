@@ -321,7 +321,7 @@ function ProductCheckoutContent() {
                       {selectedColor && (
                         <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: '#fdf2f8', color: '#db2777', border: '1px solid #fbcfe8', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                           {product.colors?.find((c: any) => c.name.toLowerCase() === selectedColor.toLowerCase())?.hexCode && (
-                            <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: product.colors?.find((c: any) => c.name.toLowerCase() === selectedColor.toLowerCase())?.hexCode, display: 'inline-block' }} />
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: (product.colors?.find((c: any) => c.name.toLowerCase() === selectedColor.toLowerCase())?.hexCode || undefined), display: 'inline-block' }} />
                           )}
                           Color: {selectedColor}
                         </span>
