@@ -150,6 +150,7 @@ export const en = {
     close: "Close",
     record: "Record",
     maxWarning: "Max",
+    outOfStock: "Out of stock for this variant",
   },
 
   // ─── POS View (placeholder) ───

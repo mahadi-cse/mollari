@@ -153,6 +153,7 @@ export const bn: DashboardTranslations = {
     close: "বন্ধ",
     record: "রেকর্ড",
     maxWarning: "সর্বোচ্চ",
+    outOfStock: "এই ভ্যারিয়েন্টে কোনো স্টক নেই",
   },
 
   // ─── POS View (placeholder) ───

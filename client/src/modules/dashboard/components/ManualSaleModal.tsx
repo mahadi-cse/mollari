@@ -468,7 +468,7 @@ export default function ManualSaleModal({ products, onClose, onConfirm }: Manual
 
           {selectedProduct && variantStock <= 0 && (
             <div className="rounded-md bg-[#fee2e2] px-[10px] py-1.5 text-[11px] font-semibold text-[#991b1b]">
-              ⚠ {t.modal.outOfStock || 'Out of stock for this variant'}
+              ⚠ {t.modal.outOfStock || t.inventory.outOfStock || 'Out of stock for this variant'}
             </div>
           )}
           {selectedProduct && variantStock > 0 && overStock && (
