@@ -79,10 +79,10 @@ export default function StaffFormView({ userId, onBack }: Props) {
       typeId: userData.userType?.id ? String(userData.userType.id) : '',
       isActive: userData.isActive,
     });
-    setMods(userData.userModules?.map((um) => um.module.code) ?? []);
+    setMods(userData.userModules?.map((um: any) => um.module.code) ?? []);
     const ubs = userData.userBranches ?? [];
-    setBrIds(ubs.map((ub) => ub.branch.id));
-    setPrimaryBr(ubs.find((ub) => ub.isPrimary)?.branch.id ?? null);
+    setBrIds(ubs.map((ub: any) => ub.branch.id));
+    setPrimaryBr(ubs.find((ub: any) => ub.isPrimary)?.branch.id ?? null);
   }, [userData]);
 
   const createMut = useMutation({ mutationFn: (d: any) => apiClient.post('/auth/users', d).then((r) => r.data?.data ?? r.data) });
@@ -176,7 +176,7 @@ export default function StaffFormView({ userId, onBack }: Props) {
               </button>
             </div>
           </div>
-          <div><label className={lc}>User Type *</label><select value={form.typeId} onChange={(e) => setForm({ ...form, typeId: e.target.value })} className={sc}><option value="">— Select —</option>{userTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
+          <div><label className={lc}>User Type *</label><select value={form.typeId} onChange={(e) => setForm({ ...form, typeId: e.target.value })} className={sc}><option value="">— Select —</option>{(userTypes as any[]).map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
           <div><label className={lc}>Status</label><select value={form.isActive ? 'active' : 'inactive'} onChange={(e) => setForm({ ...form, isActive: e.target.value === 'active' })} className={sc}><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
         </div>
       )}
@@ -213,7 +213,7 @@ export default function StaffFormView({ userId, onBack }: Props) {
             <div className="py-6 text-center text-sm" style={{ color: MFG }}>No branches found.</div>
           ) : (
             <div className="grid grid-cols-2 gap-2">
-              {branches.map((b) => {
+              {(branches as any[]).map((b: any) => {
                 const on = brIds.includes(b.id);
                 const ip = primaryBr === b.id;
                 return (

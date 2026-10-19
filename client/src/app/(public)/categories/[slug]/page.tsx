@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCategoryBySlug, useListCategories } from '@/modules/categories';
 import { useListProducts } from '@/modules/products';
+import type { Category, Product } from '@/modules/products/types';
 import { EmptyState, ErrorMessage, SkeletonCard } from '@/shared/components';
 
 const formatPrice = (value?: number | null) => {
@@ -40,9 +41,9 @@ export default function CategoryProductsPage() {
     staleTime: 15 * 60 * 1000,
   });
 
-  const activeCategories = allCategories
-    .filter((item) => item.isActive)
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const activeCategories = (allCategories as Category[])
+    .filter((item: Category) => item.isActive)
+    .sort((a: Category, b: Category) => a.name.localeCompare(b.name));
 
   if (isCategoryLoading || isProductsLoading) {
     return (
@@ -90,7 +91,7 @@ export default function CategoryProductsPage() {
     );
   }
 
-  const list = products || [];
+  const list: Product[] = (products as Product[]) || [];
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -126,7 +127,7 @@ export default function CategoryProductsPage() {
 
       {activeCategories.length > 0 && (
         <div className="mb-8 flex flex-wrap gap-2">
-          {activeCategories.map((item) => {
+          {activeCategories.map((item: Category) => {
             const active = item.slug === category.slug;
             return (
               <Link
@@ -159,7 +160,7 @@ export default function CategoryProductsPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {list.map((product) => (
+            {list.map((product: Product) => (
               <Link
                 key={product.id}
                 href={`/product/${product.slug}`}
