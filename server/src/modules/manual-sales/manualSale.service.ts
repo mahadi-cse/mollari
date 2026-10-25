@@ -129,12 +129,14 @@ export class ManualSaleService {
       const saleNumber = `${branchCode}-${dateStr}-${sequence}`;
 
       let resolvedSoldBy = data.soldBy || 'Staff';
+      let staffUserId: number | null = null;
       if (resolvedSoldBy.includes('@')) {
         const u = await tx.user.findUnique({
           where: { email: resolvedSoldBy.toLowerCase().trim() },
-          select: { firstName: true, lastName: true },
+          select: { id: true, firstName: true, lastName: true },
         });
         if (u) {
+          staffUserId = u.id;
           const fullName = `${u.firstName || ''} ${u.lastName || ''}`.trim();
           if (fullName) resolvedSoldBy = fullName;
         }
@@ -164,6 +166,50 @@ export class ManualSaleService {
           },
         },
         include: { items: true },
+      });
+
+      // Also create an Order record so it appears under Orders tab
+      const orderBranchName = data.branchName || branch?.name || 'Counter Sale';
+      const orderBranchPhone = branch?.phone || 'N/A';
+      const orderBranchAddress = branch?.address || `${orderBranchName} Outlet`;
+      const orderBranchCity = branch?.city || 'Dhaka';
+
+      await tx.order.create({
+        data: {
+          orderNumber: saleNumber,
+          channel: 'POS',
+          status: 'PENDING',
+          shippingName: orderBranchName,
+          shippingPhone: orderBranchPhone,
+          shippingAddress: orderBranchAddress,
+          shippingCity: orderBranchCity,
+          shippingCountry: 'Bangladesh',
+          subtotal: totalAmount,
+          discountAmount: 0,
+          shippingCharge: 0,
+          taxAmount: 0,
+          total: totalAmount,
+          currency: 'BDT',
+          notes: data.note ? `${data.note} (Sold by: ${resolvedSoldBy})` : `Sale recorded at ${orderBranchName} by ${resolvedSoldBy}`,
+          ...(staffUserId ? { processedBy: staffUserId } : {}),
+          items: {
+            create: lineItems.map((item) => ({
+              productId: item.productId,
+              productName: item.productNameSnapshot,
+              productSku: item.productSkuSnapshot,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              totalPrice: item.lineTotal,
+            })),
+          },
+          trackingEvents: {
+            create: {
+              status: 'PENDING',
+              title: 'Order placed',
+              description: `Direct sale recorded at ${orderBranchName} by ${resolvedSoldBy}`,
+            },
+          },
+        },
       });
 
       for (const [productIdStr, requestedQty] of Object.entries(productQtyMap)) {
@@ -295,6 +341,7 @@ export class ManualSaleService {
         cacheInvalidatePattern('analytics:overview:*'),
         cacheInvalidatePattern('products:list:*'),
         cacheInvalidatePattern('products:slug:*'),
+        cacheInvalidatePattern('orders:*'),
       ]);
       return result;
     });

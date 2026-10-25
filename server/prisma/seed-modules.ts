@@ -12,7 +12,7 @@ const MODULES = [
   { code: 'suppliers', name: 'Suppliers', icon: '🏭', sortOrder: 7 },
   { code: 'branches', name: 'Branches', icon: '🏪', sortOrder: 8 },
   { code: 'analytics', name: 'Analytics', icon: '📊', sortOrder: 9 },
-  { code: 'ecommerce', name: 'E-Commerce', icon: '🌐', sortOrder: 10 },
+  { code: 'orders', name: 'Orders', icon: '🛒', sortOrder: 10 },
   { code: 'pos', name: 'POS', icon: '🖥️', badge: 'Soon', sortOrder: 11 },
   { code: 'settings', name: 'Settings', icon: '⚙️', sortOrder: 12 },
   // Settings sub-modules

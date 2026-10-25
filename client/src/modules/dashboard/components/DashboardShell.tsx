@@ -24,7 +24,7 @@ import ManualSaleModal from './ManualSaleModal';
 
 // Lazy load views for better performance
 const OverviewView = dynamic(() => import('./views/OverviewView'));
-const EcommerceView = dynamic(() => import('../../orders/components/views/EcommerceView'));
+const OrdersView = dynamic(() => import('../../orders/components/views/OrdersView'));
 const InventoryView = dynamic(() => import('../../inventory/components/views/InventoryView'));
 const SalesView = dynamic(() => import('../../manual-sales/components/views/SalesView'));
 const ReturnsView = dynamic(() => import('../../manual-returns/components/views/ReturnsView'));
@@ -149,7 +149,8 @@ export default function DashboardShell({
         setSellLog={setSellLog}
       />
     ),
-    ecommerce: <EcommerceView products={products} orders={orders} />,
+    orders: <OrdersView products={products} orders={orders} />,
+    ecommerce: <OrdersView products={products} orders={orders} />,
     returns: <ReturnsView />,
     suppliers: <SuppliersView />,
     inventory: (

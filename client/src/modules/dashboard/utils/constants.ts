@@ -2,7 +2,7 @@ export const NAV = [
   { id: 'overview', label: 'Overview', icon: '◈' },
   { id: 'sales', label: 'Sales', icon: '💰' },
   { id: 'inventory', label: 'Inventory', icon: '📦' },
-  { id: 'ecommerce', label: 'E-Commerce', icon: '🌐' },
+  { id: 'orders', label: 'Orders', icon: '🛒' },
   { id: 'analytics', label: 'Analytics', icon: '📊' },
   { id: 'products', label: 'Products', icon: '📦' },
   { id: 'categories', label: 'Categories', icon: '🗂️' },

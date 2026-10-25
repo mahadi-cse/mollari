@@ -49,6 +49,7 @@ export const en = {
     overview: "Overview",
     sales: "Sales",
     inventory: "Inventory",
+    orders: "Orders",
     ecommerce: "E-Commerce",
     analytics: "Analytics",
     products: "Products",
@@ -648,6 +649,29 @@ export const en = {
     noCustomersMatched: "No customers matched your search.",
     placed: "Placed",
     confirmed: "Confirmed",
+  },
+
+  // ─── Orders View ───
+  orders: {
+    orders: "Orders",
+    totalOrders: "Total Orders",
+    placed: "Placed",
+    shipped: "Shipped",
+    delivered: "Delivered",
+    cancelled: "Cancelled",
+    confirmed: "Confirmed",
+    processing: "Processing",
+    refunded: "Refunded",
+    avgValue: "Avg. Value",
+    allOrders: "All Orders",
+    searchPlaceholder: "Search order #, customer, branch...",
+    allStatus: "All Status",
+    refresh: "Refresh",
+    loadingOrders: "Loading orders...",
+    noOrdersFound: "No orders found.",
+    updateStatus: "Update Status",
+    update: "Update",
+    statusConfirmTitle: "Update Order Status?",
   },
 
   // ─── Settings View ───

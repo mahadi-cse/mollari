@@ -356,69 +356,94 @@ export class OrderService {
         updateData.shippedAt = new Date();
       } else if (data.status === 'DELIVERED') {
         updateData.deliveredAt = new Date();
-        // Release reserved inventory
-        const items = await tx.orderItem.findMany({ where: { orderId } });
-        for (const item of items) {
-          const inventoryRecord = await tx.inventory.findFirst({
-            where: { productId: item.productId },
-            orderBy: { warehouseId: 'asc' },
-          });
-          if (!inventoryRecord) throw new NotFoundError(`Inventory not found for product ${item.productId}`);
-          
-          // Lock record
-          const lockedRows = await tx.$queryRaw<any[]>`
-            SELECT * FROM inventory WHERE id = ${inventoryRecord.id} FOR UPDATE
-          `;
-          const inventory = lockedRows[0];
-          if (!inventory) throw new NotFoundError(`Inventory record vanished for product ${item.productId}`);
+        // Release reserved inventory for ONLINE orders (for POS, inventory was already decremented upon sale)
+        if (order.channel === 'ONLINE' && order.status !== 'DELIVERED') {
+          const items = await tx.orderItem.findMany({ where: { orderId } });
+          for (const item of items) {
+            const inventoryRecord = await tx.inventory.findFirst({
+              where: { productId: item.productId },
+              orderBy: { warehouseId: 'asc' },
+            });
+            if (!inventoryRecord) throw new NotFoundError(`Inventory not found for product ${item.productId}`);
+            
+            // Lock record
+            const lockedRows = await tx.$queryRaw<any[]>`
+              SELECT * FROM inventory WHERE id = ${inventoryRecord.id} FOR UPDATE
+            `;
+            const inventory = lockedRows[0];
+            if (!inventory) throw new NotFoundError(`Inventory record vanished for product ${item.productId}`);
 
-          const beforeQty = inventory.quantity;
-          const afterQty = beforeQty - item.quantity;
+            const beforeQty = inventory.quantity;
+            const afterQty = beforeQty - item.quantity;
 
-          await tx.inventory.update({
-            where: { id: inventory.id },
-            data: {
-              reservedQty: { decrement: item.quantity },
-              quantity: { decrement: item.quantity },
-            },
-          });
+            await tx.inventory.update({
+              where: { id: inventory.id },
+              data: {
+                reservedQty: { decrement: item.quantity },
+                quantity: { decrement: item.quantity },
+              },
+            });
 
-          await tx.inventoryTransaction.create({
-            data: {
-              inventoryId: inventory.id,
-              type: 'SALE',
-              quantity: -item.quantity,
-              balanceBefore: beforeQty,
-              balanceAfter: afterQty,
-              reference: order.orderNumber,
-              notes: `Online order delivered (${order.orderNumber})`,
-              performedBy: 'Online System',
-            },
-          });
+            await tx.inventoryTransaction.create({
+              data: {
+                inventoryId: inventory.id,
+                type: 'SALE',
+                quantity: -item.quantity,
+                balanceBefore: beforeQty,
+                balanceAfter: afterQty,
+                reference: order.orderNumber,
+                notes: `Online order delivered (${order.orderNumber})`,
+                performedBy: 'Online System',
+              },
+            });
+          }
         }
       } else if (data.status === 'CANCELLED') {
-        // Release reserved inventory
-        const items = await tx.orderItem.findMany({ where: { orderId } });
-        for (const item of items) {
-          const inventoryRecord = await tx.inventory.findFirst({
-            where: { productId: item.productId },
-            orderBy: { warehouseId: 'asc' },
-          });
-          if (!inventoryRecord) throw new NotFoundError(`Inventory not found for product ${item.productId}`);
-
-          // Lock record
-          const lockedRows = await tx.$queryRaw<any[]>`
-            SELECT * FROM inventory WHERE id = ${inventoryRecord.id} FOR UPDATE
-          `;
-          const inventory = lockedRows[0];
-          if (!inventory) throw new NotFoundError(`Inventory record vanished for product ${item.productId}`);
-
-          await tx.inventory.update({
-            where: { id: inventory.id },
-            data: {
-              reservedQty: { decrement: item.quantity },
-            },
-          });
+        if (order.status !== 'CANCELLED') {
+          const items = await tx.orderItem.findMany({ where: { orderId } });
+          if (order.channel === 'ONLINE') {
+            for (const item of items) {
+              const inventoryRecord = await tx.inventory.findFirst({
+                where: { productId: item.productId },
+                orderBy: { warehouseId: 'asc' },
+              });
+              if (inventoryRecord) {
+                await tx.inventory.update({
+                  where: { id: inventoryRecord.id },
+                  data: {
+                    reservedQty: { decrement: item.quantity },
+                  },
+                });
+              }
+            }
+          } else if (order.channel === 'POS') {
+            for (const item of items) {
+              const inventoryRecord = await tx.inventory.findFirst({
+                where: { productId: item.productId },
+                orderBy: { warehouseId: 'asc' },
+              });
+              if (inventoryRecord) {
+                await tx.inventory.update({
+                  where: { id: inventoryRecord.id },
+                  data: {
+                    quantity: { increment: item.quantity },
+                  },
+                });
+                await tx.inventoryTransaction.create({
+                  data: {
+                    inventoryId: inventoryRecord.id,
+                    type: 'RETURN',
+                    quantity: item.quantity,
+                    balanceBefore: inventoryRecord.quantity,
+                    balanceAfter: inventoryRecord.quantity + item.quantity,
+                    reference: order.orderNumber,
+                    notes: `POS order cancelled (${order.orderNumber})`,
+                    performedBy: 'Staff',
+                  },
+                });
+              }
+            }
+          }
         }
       }
 

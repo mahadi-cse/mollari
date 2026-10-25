@@ -82,7 +82,7 @@ export function useDashboardData() {
   useEffect(() => {
     if (Array.isArray(ordersData) && !ordersLoading) {
       const transformedOrders: DashboardOrder[] = ordersData.slice(0, 50).map((order: any) => ({
-        id: `#ORD-${order.orderNumber || order.id}`,
+        id: order.orderNumber ? (order.orderNumber.startsWith('#') ? order.orderNumber : `#${order.orderNumber}`) : `#ORD-${order.id}`,
         customer: order.shippingName || t.customer,
         amount: order.total || 0,
         status: (['delivered', 'processing', 'shipped', 'pending'].includes(String(order.status || 'PENDING').toLowerCase())

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { NAV } from '../utils/constants';
 
-const NAV_CACHE_KEY = 'mollari.nav.modules.v1';
+const NAV_CACHE_KEY = 'mollari.nav.modules.v2';
 
 export function useNavModules() {
   const { data: session } = useSession();

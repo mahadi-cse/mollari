@@ -52,6 +52,7 @@ export const bn: DashboardTranslations = {
     overview: "ওভারভিউ",
     sales: "বিক্রয়",
     inventory: "ইনভেন্টরি",
+    orders: "অর্ডার",
     ecommerce: "ই-কমার্স",
     analytics: "বিশ্লেষণ",
     products: "পণ্য",
@@ -651,6 +652,29 @@ export const bn: DashboardTranslations = {
     noCustomersMatched: "আপনার অনুসন্ধানের সাথে কোন গ্রাহক মেলেনি।",
     placed: "প্লেস করা হয়েছে",
     confirmed: "নিশ্চিত",
+  },
+
+  // ─── Orders View ───
+  orders: {
+    orders: "অর্ডার",
+    totalOrders: "মোট অর্ডার",
+    placed: "প্লেস করা হয়েছে",
+    shipped: "শিপ করা হয়েছে",
+    delivered: "ডেলিভারি সম্পন্ন",
+    cancelled: "বাতিল",
+    confirmed: "নিশ্চিত",
+    processing: "প্রক্রিয়াকরণ",
+    refunded: "রিফান্ড করা হয়েছে",
+    avgValue: "গড় মূল্য",
+    allOrders: "সকল অর্ডার",
+    searchPlaceholder: "অর্ডার নং, গ্রাহক, শাখা অনুসন্ধান করুন...",
+    allStatus: "সকল স্ট্যাটাস",
+    refresh: "রিফ্রেশ",
+    loadingOrders: "অর্ডার লোড হচ্ছে...",
+    noOrdersFound: "কোনো অর্ডার পাওয়া যায়নি।",
+    updateStatus: "স্ট্যাটাস পরিবর্তন করুন",
+    update: "আপডেট",
+    statusConfirmTitle: "অর্ডার স্ট্যাটাস আপডেট করবেন?",
   },
 
   // ─── Settings View ───
