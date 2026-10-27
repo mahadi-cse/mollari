@@ -217,7 +217,7 @@ export default function OrdersView({ products, orders }: OrdersViewProps) {
                           {isSaleChannel ? 'Sale' : 'Online'}
                         </span>
                         <span className="text-[13px] font-semibold" style={{ color: Theme.fg }}>
-                          {order.shippingName || (order.customer ? `${order.customer.firstName || ''} ${order.customer.lastName || ''}`.trim() : 'N/A')}
+                          {order.shippingName || (order.customer ? `${order.customer.firstName || order.customer.user?.firstName || ''} ${order.customer.lastName || order.customer.user?.lastName || ''}`.trim() : 'N/A')}
                         </span>
                         <Badge label={localizedStatusLabel} bg={statusInfo.bg} color={statusInfo.color} />
                       </div>

@@ -14,6 +14,9 @@ export interface Customer {
   id: number;
   userId: number;
   user?: User;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
   segment?: CustomerSegment;
   totalOrders: number;
   totalSpent: number;
