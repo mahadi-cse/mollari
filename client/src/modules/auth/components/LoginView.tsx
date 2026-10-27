@@ -127,8 +127,8 @@ export default function LoginView({ callbackUrl = '/dashboard' }: LoginViewProps
   };
 
   return (
-    <main className="min-h-screen bg-white px-4 py-12">
-      <div className="mx-auto flex w-full max-w-5xl overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-lg shadow-zinc-100">
+    <main className="min-h-screen bg-[#fafafa] px-4 py-8 flex items-center justify-center">
+      <div className="mx-auto flex w-full max-w-5xl overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-xl shadow-zinc-200/50">
         <section className="hidden w-1/2 bg-zinc-50 p-10 text-zinc-900 lg:flex lg:flex-col lg:justify-start lg:gap-10 relative overflow-hidden border-r border-zinc-200">
           {/* Subtle decorative elements */}
           <div className="absolute top-20 right-10 w-40 h-40 bg-zinc-100/30 rounded-full blur-3xl" />
@@ -137,34 +137,26 @@ export default function LoginView({ callbackUrl = '/dashboard' }: LoginViewProps
           <div className="relative z-10">
             <p className="text-xs uppercase tracking-[0.4em] text-zinc-500">Mollari</p>
             <h1 className="mt-4 text-4xl font-semibold leading-tight text-zinc-900">
-              Welcome to
-              <span className="block text-zinc-700">Mollari</span>
+              Internal Portal
             </h1>
             <p className="mt-4 max-w-sm text-sm text-zinc-600">
-              Your go-to destination for skincare, haircare, and beauty essentials — delivered with care.
+              Sign in with your credentials to access the system.
             </p>
           </div>
 
           <div className="relative z-10 space-y-4">
             <div className="flex items-start gap-3">
-              <div className="text-2xl flex-shrink-0">✨</div>
+              <div className="text-xl flex-shrink-0">🔒</div>
               <div>
-                <p className="font-semibold text-sm text-zinc-900">Discover Your Glow</p>
-                <p className="text-xs text-zinc-600">Explore curated skincare, haircare &amp; beauty products just for you</p>
+                <p className="font-semibold text-sm text-zinc-900">Restricted Access</p>
+                <p className="text-xs text-zinc-600">Authorized personnel only</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
-              <div className="text-2xl flex-shrink-0">📦</div>
+              <div className="text-xl flex-shrink-0">🛡️</div>
               <div>
-                <p className="font-semibold text-sm text-zinc-900">Track Every Order</p>
-                <p className="text-xs text-zinc-600">Stay updated on your orders from placement to delivery</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="text-2xl flex-shrink-0">💖</div>
-              <div>
-                <p className="font-semibold text-sm text-zinc-900">Save Your Favourites</p>
-                <p className="text-xs text-zinc-600">Wishlist the products you love and come back anytime</p>
+                <p className="font-semibold text-sm text-zinc-900">Encrypted Sessions</p>
+                <p className="text-xs text-zinc-600">All activity monitored and logged</p>
               </div>
             </div>
           </div>
@@ -172,8 +164,8 @@ export default function LoginView({ callbackUrl = '/dashboard' }: LoginViewProps
 
         <section className="w-full p-6 sm:p-10 lg:w-1/2 flex flex-col justify-center">
           <div className="mb-8">
-            <h2 className="text-3xl font-semibold text-zinc-900">Welcome Back</h2>
-            <p className="mt-2 text-sm text-zinc-600">Sign in to your account to access your store dashboard.</p>
+            <h2 className="text-3xl font-semibold text-zinc-900">Sign In</h2>
+            <p className="mt-2 text-sm text-zinc-600">Enter your credentials to continue.</p>
           </div>
 
           <form className="space-y-5" onSubmit={handleSubmit}>
@@ -255,22 +247,10 @@ export default function LoginView({ callbackUrl = '/dashboard' }: LoginViewProps
             </button>
           </form>
 
-          <p className="mt-4 text-center text-sm text-zinc-600">
-            New customer?{' '}
-            <Link
-              href={`/register?callbackUrl=${encodeURIComponent(normalizedCallbackUrl)}`}
-              className="font-semibold text-zinc-900 hover:text-zinc-700 transition"
-            >
-              Create an account
-            </Link>
-          </p>
-
-          <p className="mt-6 text-center text-sm text-zinc-600">
-            Back to store:{' '}
-            <Link href="/" className="font-semibold text-zinc-900 hover:text-zinc-700 transition">
-              Visit storefront
-            </Link>
-          </p>
+          {/* Registration link temporarily hidden per client demand */}
+          <div className="mt-6 pt-4 border-t border-zinc-100 text-center text-xs text-zinc-400">
+            <span>© {new Date().getFullYear()} Mollari. All rights reserved.</span>
+          </div>
         </section>
       </div>
     </main>

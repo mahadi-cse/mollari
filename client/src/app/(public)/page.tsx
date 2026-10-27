@@ -1,67 +1,23 @@
-import { dehydrate, HydrationBoundary, QueryClient } from "@tanstack/react-query";
-import { Features } from "@/modules/homepage/components/Features";
-import { FeaturedProducts } from "@/modules/homepage/components/FeaturedProducts";
-import { Hero } from "@/modules/homepage/components/Hero";
-import { Newsletter } from "@/modules/homepage/components/Newsletter";
-import { HomepageLocaleProvider } from "@/modules/homepage/locales/HomepageLocaleContext";
-import { homepageAPI } from "@/modules/homepage/api";
-import { HOMEPAGE_QUERY_KEYS } from "@/modules/homepage/queries";
-import { promotionsAPI } from "@/modules/promotions/api";
-import { PROMOTION_KEYS } from "@/modules/promotions/queries";
+import { Suspense } from 'react';
+import { LoginView } from '@/modules/auth';
 
-export const revalidate = 60;
+export const metadata = {
+  title: 'Mollari | Sign In',
+  description: 'Mollari Internal Operations Portal Login',
+};
 
-export default async function HomePage() {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        // Setting staleTime to Infinity on the SSR client prevents the
-        // hydrated data from being considered stale the instant it lands on
-        // the client, which would trigger an immediate background refetch
-        // that causes the flash-of-old-data glitch.
-        staleTime: Infinity,
-      },
-    },
-  });
+interface HomePageProps {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}
 
-  // Prefetch critical homepage data on the server.
-  // Use Promise.allSettled so if any single endpoint fails, the page still renders with remaining components.
-  await Promise.allSettled([
-    queryClient.prefetchQuery({
-      queryKey: HOMEPAGE_QUERY_KEYS.settings(),
-      queryFn: () => homepageAPI.getSettings(),
-    }),
-    // stats() is a dashboard metric (total orders, revenue, etc.) — not required
-    // for the public-facing homepage render. Deferring it to client-side fetch
-    // reduces the server-side prefetch waterfall by 1 backend API call.
-    queryClient.prefetchQuery({
-      queryKey: HOMEPAGE_QUERY_KEYS.sliders(),
-      queryFn: () => homepageAPI.getSliders(),
-    }),
-    queryClient.prefetchQuery({
-      queryKey: HOMEPAGE_QUERY_KEYS.categories(),
-      queryFn: () => homepageAPI.getCategories(),
-    }),
-    queryClient.prefetchQuery({
-      queryKey: HOMEPAGE_QUERY_KEYS.featuredProducts(12),
-      queryFn: () => homepageAPI.getFeaturedProducts(12),
-    }),
-    queryClient.prefetchQuery({
-      queryKey: PROMOTION_KEYS.active(),
-      queryFn: () => promotionsAPI.getActive(),
-    }),
-  ]);
-
-  const dehydratedState = dehydrate(queryClient);
+export default async function HomePage({ searchParams }: HomePageProps) {
+  const params = searchParams ? await searchParams : {};
+  const callbackParam = params.callbackUrl;
+  const callbackUrl = Array.isArray(callbackParam) ? callbackParam[0] : callbackParam;
 
   return (
-    <HomepageLocaleProvider defaultLocale="en">
-      <HydrationBoundary state={dehydratedState}>
-        <Hero />
-        <Features />
-        <FeaturedProducts />
-        <Newsletter />
-      </HydrationBoundary>
-    </HomepageLocaleProvider>
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-sm text-zinc-400">Loading portal...</div>}>
+      <LoginView callbackUrl={callbackUrl || '/dashboard'} />
+    </Suspense>
   );
 }
