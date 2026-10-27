@@ -8,12 +8,30 @@ import { Card, Btn, Badge } from '@/shared/components/ui/Primitives';
 import { useListOrders, useUpdateOrderStatusMutation, useEntrySteadfastMutation, useSyncSteadfastStatusMutation } from '@/modules/orders';
 import { useSiteSettings } from '@/modules/homepage';
 import toast from 'react-hot-toast';
-import { Truck, Printer, ChevronDown, ChevronUp, CheckCircle2, RefreshCw } from 'lucide-react';
+import { Truck, Printer, ChevronDown, ChevronUp, CheckCircle2, RefreshCw, Copy, Phone, MapPin, ExternalLink } from 'lucide-react';
 import { confirmDialog } from '@/shared/lib/confirmDialog';
 import type { Order as RealOrder } from '@/modules/orders/types';
 import { useDashboardLocale } from '@/modules/dashboard/locales/DashboardLocaleContext';
 
 export type RealOrderStatus = 'PENDING' | 'CONFIRMED' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'REFUNDED';
+
+const STEADFAST_STEPS = [
+  { key: 'entered', label: 'Entered' },
+  { key: 'approved', label: 'Approved' },
+  { key: 'rider', label: 'With a rider' },
+  { key: 'delivered', label: 'Delivered' },
+];
+
+const getSteadfastStepIndex = (courierStatus?: string | null, steadfastEntry?: boolean, orderStatus?: string) => {
+  const cs = (courierStatus || '').toLowerCase();
+  const os = (orderStatus || '').toLowerCase();
+
+  if (cs === 'delivered' || cs === 'partial_delivered' || os === 'delivered') return 3;
+  if (cs.includes('rider') || cs.includes('out_for_delivery') || os === 'shipped') return 2;
+  if (cs.includes('approved') || cs.includes('in_transit') || cs.includes('transit') || cs.includes('hub') || cs.includes('picked')) return 1;
+  if (steadfastEntry || cs.includes('pending') || cs.includes('in_review') || cs.includes('entered') || cs.length > 0 || os === 'confirmed' || os === 'processing') return 0;
+  return -1;
+};
 
 const statusDisplayMap: Record<string, { labelKey: string; defaultLabel: string; bg: string; color: string }> = {
   PENDING:    { labelKey: 'placed',     defaultLabel: 'Placed',    bg: '#fef3c7', color: '#b45309' },
@@ -94,6 +112,12 @@ export default function OrdersView({ products, orders }: OrdersViewProps) {
     } catch {
       // handled in onError
     }
+  };
+
+  const handleCopy = (text: string, label = 'Copied to clipboard') => {
+    if (!text) return;
+    void navigator.clipboard.writeText(text);
+    toast.success(label);
   };
 
   const handlePrintOrder = (order: any) => {
@@ -505,238 +529,318 @@ export default function OrdersView({ products, orders }: OrdersViewProps) {
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700 transition cursor-pointer"
                       >
                         <span>{isExpanded ? 'Collapse' : 'Details'}</span>
-                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                       </button>
                     </div>
                   </div>
 
                   {/* Expanded Detail */}
                   {isExpanded && (
-                    <div className="px-4 pb-4 pt-2 border-t" style={{ background: Theme.muted, borderColor: Theme.border }}>
-                      <div className={`flex gap-4 ${isMobile ? 'flex-col' : ''}`}>
-                        {/* Left: Status Stepper & Info */}
-                        <div className="flex-1 min-w-0">
-                          {/* 3-Step Progress Stepper: Placed -> Shipped -> Delivered */}
-                          {currentStatus !== 'CANCELLED' && currentStatus !== 'REFUNDED' ? (
-                            <div className="mb-3 rounded-lg border bg-white p-3" style={{ borderColor: Theme.border }}>
-                              <div className="flex items-center justify-between gap-1">
-                                {STEPS.map((step, idx) => {
-                                  const state = getStepState(step.status, currentStatus);
-                                  return (
-                                    <React.Fragment key={step.status}>
-                                      <div className="flex flex-col items-center flex-1" style={{ minWidth: 60 }}>
-                                        <div
-                                          className="flex h-7 w-7 items-center justify-center rounded-full text-xs shadow-sm transition-all"
-                                          style={{
-                                            background: state !== 'upcoming' ? Theme.primary : '#f3f4f6',
-                                            color: state !== 'upcoming' ? '#fff' : Theme.mutedFg,
-                                            fontWeight: 700,
-                                            boxShadow: state === 'active' ? `0 0 0 3px ${Theme.primary}33` : 'none',
-                                          }}
-                                        >
-                                          {state === 'done' ? '✓' : step.icon}
-                                        </div>
-                                        <p
-                                          className="mt-1 text-[10px] font-bold text-center leading-tight"
-                                          style={{ color: state !== 'upcoming' ? Theme.fg : Theme.mutedFg }}
-                                        >
-                                          {step.label}
-                                        </p>
-                                      </div>
-                                      {idx < STEPS.length - 1 && (
-                                        <div
-                                          className="h-[2px] flex-1 mx-1 -mt-4 transition-all"
-                                          style={{
-                                            background:
-                                              getStepState(STEPS[idx + 1].status, currentStatus) !== 'upcoming'
-                                                ? Theme.primary
-                                                : '#e5e7eb',
-                                          }}
-                                        />
-                                      )}
-                                    </React.Fragment>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="mb-3 rounded-lg border px-3 py-2 text-xs font-semibold" style={{ background: '#fef2f2', borderColor: '#fca5a5', color: '#b91c1c' }}>
-                              ⚠️ Order {currentStatus.toLowerCase()}
-                            </div>
-                          )}
+                    <div className="px-4 pb-5 pt-3 border-t bg-zinc-50/60" style={{ borderColor: Theme.border }}>
+                      <div className="space-y-4 w-full">
+                        {/* Steadfast Top Parcel Header & Stepper Card */}
+                        <div className="rounded-xl border bg-white p-4 shadow-xs" style={{ borderColor: Theme.border }}>
+                          {/* Top Row: Status, Parcel #, COD / Delivery stats, Quick Actions */}
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-zinc-100">
+                            {/* Left: Status & ID */}
+                            <div className="flex items-center gap-2.5 flex-wrap">
+                              <span
+                                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold"
+                                style={{
+                                  background:
+                                    order.courierStatus?.toLowerCase() === 'delivered'
+                                      ? '#dcfce7'
+                                      : order.courierStatus?.toLowerCase() === 'cancelled'
+                                      ? '#fee2e2'
+                                      : order.steadfastEntry || order.consignmentId
+                                      ? '#fef3c7'
+                                      : '#f3f4f6',
+                                  color:
+                                    order.courierStatus?.toLowerCase() === 'delivered'
+                                      ? '#166534'
+                                      : order.courierStatus?.toLowerCase() === 'cancelled'
+                                      ? '#b91c1c'
+                                      : order.steadfastEntry || order.consignmentId
+                                      ? '#92400e'
+                                      : '#4b5563',
+                                }}
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                                <span className="capitalize">{order.courierStatus || (order.steadfastEntry ? 'Pending' : 'Not Entered')}</span>
+                              </span>
 
-                            {/* Order Details Grid */}
-                          <div className="rounded-lg border bg-white p-3 text-[11px] space-y-2.5" style={{ borderColor: Theme.border }}>
-                            {/* Steadfast Courier Info Box in Expanded View */}
-                            <div className="p-2.5 rounded-lg bg-pink-50/50 border border-pink-100 space-y-1.5">
-                              <div className="flex items-center justify-between text-xs font-bold text-pink-800">
-                                <div className="flex items-center gap-1.5">
-                                  <Truck className="w-4 h-4 text-pink-600" />
-                                  <span>Steadfast Courier Delivery</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[10px] px-2 py-0.5 rounded-full uppercase font-bold bg-pink-100 text-pink-700">
-                                    {order.courierStatus || (order.steadfastEntry ? 'In Review' : 'Not Entered')}
-                                  </span>
-                                  {order.consignmentId?.startsWith('SF-') ? (
-                                    <button
-                                      type="button"
-                                      disabled={entrySteadfastMutation.isPending && (entrySteadfastMutation.variables as any) === order.id}
-                                      onClick={() => handleSteadfastEntry(order.id)}
-                                      className="px-2 py-0.5 rounded text-[10px] font-bold bg-pink-600 hover:bg-pink-700 text-white transition disabled:opacity-50 cursor-pointer"
-                                    >
-                                      {entrySteadfastMutation.isPending && (entrySteadfastMutation.variables as any) === order.id
-                                        ? 'Booking...'
-                                        : 'Book Live'}
-                                    </button>
-                                  ) : (order.steadfastEntry || order.consignmentId) ? (
-                                    <button
-                                      type="button"
-                                      disabled={syncSteadfastStatusMutation.isPending && (syncSteadfastStatusMutation.variables as any) === order.id}
-                                      onClick={() => handleSyncSteadfastStatus(order.id)}
-                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition cursor-pointer"
-                                    >
-                                      <RefreshCw className={`w-3 h-3 ${syncSteadfastStatusMutation.isPending && (syncSteadfastStatusMutation.variables as any) === order.id ? 'animate-spin' : ''}`} />
-                                      <span>Check Live Status</span>
-                                    </button>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      disabled={entrySteadfastMutation.isPending && (entrySteadfastMutation.variables as any) === order.id}
-                                      onClick={() => handleSteadfastEntry(order.id)}
-                                      className="px-2 py-0.5 rounded text-[10px] font-bold bg-pink-600 hover:bg-pink-700 text-white transition disabled:opacity-50 cursor-pointer"
-                                    >
-                                      {entrySteadfastMutation.isPending && (entrySteadfastMutation.variables as any) === order.id
-                                        ? 'Sending...'
-                                        : 'Entry Steadfast'}
-                                    </button>
-                                  )}
-                                </div>
+                              <div className="flex items-center gap-1 font-mono font-bold text-base text-zinc-900">
+                                <span>#{order.consignmentId || order.orderNumber}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopy(order.consignmentId || order.orderNumber, 'ID copied!')}
+                                  className="p-1 rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 transition"
+                                  title="Copy ID"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                </button>
                               </div>
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-zinc-700">
-                                <div>
-                                  <span className="text-zinc-400 block text-[9px] uppercase font-bold">Consignment ID</span>
-                                  <span className="font-mono font-semibold">{order.consignmentId || '—'}</span>
-                                </div>
-                                <div>
-                                  <span className="text-zinc-400 block text-[9px] uppercase font-bold">Tracking Code</span>
-                                  <span className="font-mono font-semibold">{order.trackingCode || '—'}</span>
-                                </div>
-                                <div>
-                                  <span className="text-zinc-400 block text-[9px] uppercase font-bold">COD Collection</span>
-                                  <span className="font-bold">৳{order.codAmount ?? order.total}</span>
-                                </div>
-                                <div>
-                                  <span className="text-zinc-400 block text-[9px] uppercase font-bold">Entry Status</span>
-                                  <span className="font-semibold text-emerald-700">
-                                    {order.steadfastEntry ? '✓ Sent to Courier' : 'Pending Booking'}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
 
-                            <div className="flex flex-wrap gap-x-4 gap-y-1" style={{ color: Theme.mutedFg }}>
-                              <span>📍 <strong className="text-gray-800">{order.shippingName}</strong>, {order.shippingAddress || ''} {order.shippingCity ? `(${order.shippingCity})` : ''}</span>
-                              {order.shippingPhone && <span>📞 {order.shippingPhone}</span>}
-                              {(order.customer as any)?.user?.email && (
-                                <span>✉️ {(order.customer as any).user.email}</span>
+                              {(order.trackingCode || order.consignmentId) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopy(`https://steadfast.com.bd/tracking/${order.trackingCode || order.consignmentId}`, 'Tracking link copied!')}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-zinc-200 hover:bg-zinc-50 text-[11px] font-semibold text-zinc-700 transition cursor-pointer"
+                                >
+                                  <ExternalLink className="w-3 h-3 text-zinc-500" />
+                                  <span>Copy tracking link</span>
+                                </button>
                               )}
                             </div>
 
-                            {order.notes && (
-                              <div className="text-[10px] rounded p-1.5 bg-gray-50 text-gray-600 border border-gray-100">
-                                📝 {order.notes}
+                            {/* Right: COD pill, Delivery Charge pill, Action Buttons */}
+                            <div className="flex items-center gap-2 flex-wrap md:flex-nowrap">
+                              <div className="px-3 py-1 rounded-lg border border-zinc-200 bg-zinc-50/70 text-right">
+                                <span className="text-[10px] uppercase font-bold text-zinc-500 block">COD</span>
+                                <span className="font-bold text-xs text-zinc-900 block">৳{order.codAmount ?? order.total}</span>
                               </div>
-                            )}
 
-                            {/* Items list */}
-                            <div className="border-t pt-2 space-y-1" style={{ borderColor: Theme.border }}>
-                              <div className="font-semibold text-gray-700 text-[10px] uppercase tracking-wider">Order Items</div>
-                              {(order.items || []).map((item: any) => (
-                                <div key={item.id} className="flex justify-between items-center text-[11px]">
-                                  <span className="font-medium text-gray-800">
-                                    {item.productName || item.product?.name || 'Item'}
-                                    <span className="text-gray-400 ml-1.5 font-normal">×{item.quantity}</span>
-                                  </span>
-                                  <span className="font-semibold text-gray-700">
-                                    {formatCurrency(Number(item.totalPrice || item.price || (item.unitPrice * item.quantity) || 0))}
-                                  </span>
-                                </div>
-                              ))}
+                              <div className="px-3 py-1 rounded-lg border border-zinc-200 bg-zinc-50/70 text-right">
+                                <span className="text-[10px] uppercase font-bold text-zinc-500 block">Total</span>
+                                <span className="font-bold text-xs text-zinc-900 block">৳{order.total}</span>
+                              </div>
+
+                              {order.consignmentId?.startsWith('SF-') ? (
+                                <button
+                                  type="button"
+                                  disabled={entrySteadfastMutation.isPending && (entrySteadfastMutation.variables as any) === order.id}
+                                  onClick={() => handleSteadfastEntry(order.id)}
+                                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-pink-600 hover:bg-pink-700 text-white shadow-xs transition disabled:opacity-50 cursor-pointer"
+                                >
+                                  {entrySteadfastMutation.isPending && (entrySteadfastMutation.variables as any) === order.id ? 'Booking...' : 'Book Live'}
+                                </button>
+                              ) : (order.steadfastEntry || order.consignmentId) ? (
+                                <button
+                                  type="button"
+                                  disabled={syncSteadfastStatusMutation.isPending && (syncSteadfastStatusMutation.variables as any) === order.id}
+                                  onClick={() => handleSyncSteadfastStatus(order.id)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition shadow-xs cursor-pointer"
+                                >
+                                  <RefreshCw className={`w-3.5 h-3.5 ${syncSteadfastStatusMutation.isPending && (syncSteadfastStatusMutation.variables as any) === order.id ? 'animate-spin' : ''}`} />
+                                  <span>Sync Live</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={entrySteadfastMutation.isPending && (entrySteadfastMutation.variables as any) === order.id}
+                                  onClick={() => handleSteadfastEntry(order.id)}
+                                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-pink-600 hover:bg-pink-700 text-white shadow-xs transition disabled:opacity-50 cursor-pointer"
+                                >
+                                  {entrySteadfastMutation.isPending && (entrySteadfastMutation.variables as any) === order.id ? 'Sending...' : 'Entry Steadfast'}
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => handlePrintOrder(order)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-zinc-200 hover:bg-zinc-50 text-zinc-700 transition cursor-pointer"
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                                <span>Invoice</span>
+                              </button>
                             </div>
+                          </div>
 
-                            {/* Timeline pills */}
-                            {order.trackingEvents && order.trackingEvents.length > 0 && (
-                              <div className="border-t pt-2 space-y-1" style={{ borderColor: Theme.border }}>
-                                <div className="font-semibold text-gray-700 text-[10px] uppercase tracking-wider">Tracking History</div>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {order.trackingEvents.map((event) => (
-                                    <span
-                                      key={event.id}
-                                      className="rounded bg-gray-50 border px-2 py-0.5 text-[10px] text-gray-600"
-                                      style={{ borderColor: Theme.border }}
-                                    >
-                                      <strong>{event.title}</strong>{' '}
-                                      <span className="opacity-60 text-[9px]">
-                                        ({new Date(event.createdAt).toLocaleString('en-BD', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })})
+                          {/* Steadfast Stepper */}
+                          <div className="pt-4 pb-1">
+                            <div className="flex items-center justify-between relative">
+                              {STEADFAST_STEPS.map((step, idx) => {
+                                const activeIdx = getSteadfastStepIndex(order.courierStatus, order.steadfastEntry, order.status);
+                                const isDone = activeIdx >= idx;
+                                const isActive = activeIdx === idx;
+                                return (
+                                  <React.Fragment key={step.key}>
+                                    <div className="flex flex-col items-center flex-1 text-center z-10">
+                                      <div
+                                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold transition-all ${
+                                          isDone
+                                            ? 'bg-emerald-600 text-white shadow-xs'
+                                            : 'bg-zinc-100 text-zinc-400 border border-zinc-200'
+                                        }`}
+                                      >
+                                        {isDone ? '✓' : idx + 1}
+                                      </div>
+                                      <span
+                                        className={`mt-1.5 text-xs font-semibold ${
+                                          isActive ? 'text-zinc-900 font-bold' : isDone ? 'text-zinc-700' : 'text-zinc-400'
+                                        }`}
+                                      >
+                                        {step.label}
                                       </span>
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
+                                    </div>
+                                    {idx < STEADFAST_STEPS.length - 1 && (
+                                      <div
+                                        className={`h-[2px] flex-1 -mt-4 transition-all ${
+                                          activeIdx > idx ? 'bg-emerald-500' : 'bg-zinc-200'
+                                        }`}
+                                      />
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
 
-                        {/* Right: Total Amount & Status Updater */}
-                        <div className="flex flex-col sm:items-end justify-between gap-3 shrink-0 rounded-lg border bg-white p-3.5 sm:min-w-[220px]" style={{ borderColor: Theme.border }}>
-                          <div>
-                            <div className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold sm:text-right">Total Amount</div>
-                            <div className="text-xl font-black sm:text-right" style={{ color: Theme.primary }}>
-                              {formatCurrency(Number(order.total || 0))}
+                        {/* 2-Column Minimal Balanced Grid */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 w-full">
+                          {/* LEFT COLUMN: Recipient + Parcel details */}
+                          <div className="space-y-4">
+                            {/* Recipient Card */}
+                            <div className="rounded-xl border bg-white p-4 shadow-xs space-y-3" style={{ borderColor: Theme.border }}>
+                              <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Recipient</h4>
+                              <div>
+                                <div className="text-base font-bold text-zinc-900">{order.shippingName || 'N/A'}</div>
+                                <div className="text-xs text-zinc-600 mt-1 leading-relaxed">
+                                  {order.shippingAddress || 'No address provided'}
+                                </div>
+                                <div className="flex items-center gap-1 text-xs text-zinc-500 font-medium mt-1">
+                                  <MapPin className="w-3.5 h-3.5 text-zinc-400" />
+                                  <span>{order.shippingCity || 'Bangladesh'}</span>
+                                </div>
+                              </div>
+
+                              <div className="pt-2.5 border-t border-zinc-100 flex items-center justify-between flex-wrap gap-2">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs text-zinc-500">Phone:</span>
+                                  <span className="font-mono font-bold text-zinc-900 text-xs">{order.shippingPhone || 'N/A'}</span>
+                                </div>
+                                {order.shippingPhone && order.shippingPhone !== 'N/A' && (
+                                  <div className="flex items-center gap-1.5">
+                                    <a
+                                      href={`tel:${order.shippingPhone}`}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-zinc-200 bg-white hover:bg-zinc-50 text-xs font-semibold text-zinc-700 transition"
+                                    >
+                                      <Phone className="w-3 h-3 text-zinc-500" />
+                                      <span>Call</span>
+                                    </a>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCopy(order.shippingPhone || '', 'Phone copied!')}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-zinc-200 bg-white hover:bg-zinc-50 text-xs font-semibold text-zinc-700 transition cursor-pointer"
+                                    >
+                                      <Copy className="w-3 h-3 text-zinc-500" />
+                                      <span>Copy</span>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Parcel Details Card */}
+                            <div className="rounded-xl border bg-white p-4 shadow-xs space-y-3" style={{ borderColor: Theme.border }}>
+                              <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Parcel Details</h4>
+                              <div className="grid grid-cols-2 gap-3 text-xs">
+                                <div>
+                                  <span className="text-zinc-500 block text-[11px]">Tracking Code</span>
+                                  <span className="font-mono font-bold text-indigo-700 block mt-0.5">{order.trackingCode || '—'}</span>
+                                </div>
+                                <div>
+                                  <span className="text-zinc-500 block text-[11px]">Consignment ID</span>
+                                  <span className="font-mono font-bold text-zinc-900 block mt-0.5">{order.consignmentId || '—'}</span>
+                                </div>
+                                <div>
+                                  <span className="text-zinc-500 block text-[11px]">Channel</span>
+                                  <span className="font-semibold text-zinc-800 block mt-0.5">{isSaleChannel ? 'Manual Sale' : 'Online Store'}</span>
+                                </div>
+                                <div>
+                                  <span className="text-zinc-500 block text-[11px]">Items in Order</span>
+                                  <span className="font-semibold text-zinc-800 block mt-0.5">{order.items?.length || 1}</span>
+                                </div>
+                                <div>
+                                  <span className="text-zinc-500 block text-[11px]">Created</span>
+                                  <span className="text-zinc-700 block mt-0.5">
+                                    {order.createdAt
+                                      ? new Date(order.createdAt).toLocaleDateString('en-BD', {
+                                          day: '2-digit',
+                                          month: 'short',
+                                          year: 'numeric',
+                                        })
+                                      : '—'}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-zinc-500 block text-[11px]">Steadfast Status</span>
+                                  <span className="font-bold text-emerald-700 capitalize block mt-0.5">
+                                    {order.courierStatus || (order.steadfastEntry ? 'In Review' : 'Pending Entry')}
+                                  </span>
+                                </div>
+                              </div>
                             </div>
                           </div>
 
-                          {/* Status Updater */}
-                          <div className="w-full space-y-1.5 border-t pt-2.5" style={{ borderColor: Theme.border }}>
-                            <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 block">
-                              {(t as any).orders?.updateStatus || 'Update Status'}
-                            </label>
-                            <div className="flex items-center gap-1.5">
-                              <select
-                                value={selected}
-                                onChange={(e) => setPendingStatus((prev) => ({ ...prev, [order.id]: e.target.value as RealOrderStatus }))}
-                                className="flex-1 rounded border px-2 py-1.5 text-xs outline-none bg-white font-medium cursor-pointer"
-                                style={{ borderColor: Theme.border, color: Theme.fg }}
-                                disabled={isSaving}
-                              >
-                                <option value="PENDING">{(t as any).orders?.placed || (t as any).ecommerce?.placed || 'Placed'}</option>
-                                <option value="SHIPPED">{(t as any).orders?.shipped || (t as any).ecommerce?.shipped || 'Shipped'}</option>
-                                <option value="DELIVERED">{(t as any).orders?.delivered || (t as any).ecommerce?.delivered || 'Delivered'}</option>
-                                <option value="CANCELLED">{(t as any).orders?.cancelled || (t as any).ecommerce?.cancelled || 'Cancelled'}</option>
-                                {currentStatus === 'CONFIRMED' && <option value="CONFIRMED">Confirmed</option>}
-                                {currentStatus === 'PROCESSING' && <option value="PROCESSING">Processing</option>}
-                              </select>
-                              <Btn
-                                variant="primary"
-                                size="sm"
-                                onClick={async () => {
-                                  if (selected === currentStatus) return;
-                                  const targetDisplay = getStatusStyle(selected).defaultLabel;
-                                  const confirmed = await confirmDialog({
-                                    title: (t as any).orders?.statusConfirmTitle || (t as any).ecommerce?.updateOrderStatus || 'Update Order Status?',
-                                    text: `Change order #${order.orderNumber} status to ${targetDisplay}?`,
-                                    confirmButtonText: (t as any).orders?.update || (t as any).ecommerce?.update || 'Update',
-                                    icon: 'question',
-                                  });
-                                  if (confirmed) {
-                                    updateStatusMutation.mutate({ orderId: order.id, data: { status: selected } });
-                                  }
-                                }}
-                                disabled={selected === currentStatus || isSaving}
-                              >
-                                {isSaving ? '...' : (t as any).orders?.update || (t as any).ecommerce?.update || 'Update'}
-                              </Btn>
+                          {/* RIGHT COLUMN: Contents & Notes + Tracking Updates */}
+                          <div className="space-y-4">
+                            {/* Contents & Note Card */}
+                            <div className="rounded-xl border bg-white p-4 shadow-xs space-y-3" style={{ borderColor: Theme.border }}>
+                              <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Contents & Note</h4>
+
+                              <div className="text-xs p-2.5 rounded-lg bg-zinc-50 border border-zinc-100 text-zinc-700">
+                                <div className="text-[10px] uppercase font-bold text-zinc-400 mb-0.5">Note for delivery</div>
+                                <div>{order.notes || '—'}</div>
+                              </div>
+
+                              <div className="space-y-2 pt-1">
+                                <div className="text-[10px] uppercase font-bold text-zinc-400">Order Items ({order.items?.length || 0})</div>
+                                <div className="divide-y divide-zinc-100 rounded-lg border border-zinc-100 overflow-hidden bg-white">
+                                  {(order.items || []).map((item: any) => (
+                                    <div key={item.id} className="flex justify-between items-center px-3 py-2 text-xs">
+                                      <div>
+                                        <span className="font-medium text-zinc-900">{item.productName || item.product?.name || 'Item'}</span>
+                                        <span className="text-zinc-400 ml-2">x{item.quantity}</span>
+                                      </div>
+                                      <div className="font-bold text-zinc-900">
+                                        ৳{Number(item.totalPrice || item.price || (item.unitPrice * item.quantity) || 0)}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Tracking Updates Timeline Card */}
+                            <div className="rounded-xl border bg-white p-4 shadow-xs space-y-3" style={{ borderColor: Theme.border }}>
+                              <div className="flex items-center justify-between">
+                                <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Tracking Updates</h4>
+                                {(order.steadfastEntry || order.consignmentId) && (
+                                  <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                                    Webhook Active
+                                  </span>
+                                )}
+                              </div>
+
+                              {order.trackingEvents && order.trackingEvents.length > 0 ? (
+                                <div className="relative pl-6 space-y-3 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-[2px] before:bg-zinc-200">
+                                  {order.trackingEvents.map((event, idx) => (
+                                    <div key={event.id} className="relative">
+                                      <span
+                                        className={`absolute -left-6 top-1 w-3.5 h-3.5 rounded-full border-2 ${
+                                          idx === 0 ? 'bg-emerald-500 border-emerald-200' : 'bg-white border-zinc-300'
+                                        }`}
+                                      />
+                                      <div className="text-xs font-bold text-zinc-900">{event.title}</div>
+                                      <div className="text-[11px] text-zinc-400 mt-0.5">
+                                        {new Date(event.createdAt).toLocaleString('en-BD', {
+                                          day: '2-digit',
+                                          month: 'short',
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                        })}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-xs text-zinc-500 py-3 text-center border border-dashed border-zinc-200 rounded-lg">
+                                  {order.steadfastEntry || order.consignmentId
+                                    ? 'Parcel registered. Live courier tracking updates will appear here automatically via webhook.'
+                                    : 'Parcel not entered into courier yet.'}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
