@@ -131,4 +131,14 @@ export const ordersAPI = {
     const response = await apiClient.delete<ApiResponse<Order>>(`/orders/${orderId}`);
     return response.data.data;
   },
+
+  entrySteadfast: async (orderId: number) => {
+    const response = await apiClient.post<ApiResponse<Order>>(`/orders/${orderId}/steadfast`, {});
+    return response.data.data;
+  },
+
+  getSteadfastStatus: async (orderId: number) => {
+    const response = await apiClient.get<ApiResponse<{ order: Order; liveStatus: string; rawResponse?: any }>>(`/orders/${orderId}/steadfast-status`);
+    return response.data.data;
+  },
 };

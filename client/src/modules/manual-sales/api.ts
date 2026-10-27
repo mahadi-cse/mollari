@@ -14,6 +14,13 @@ export interface CreateManualSaleRequest {
   note?: string;
   branchId?: number;
   branchName?: string;
+  recipientName?: string;
+  recipientPhone?: string;
+  recipientAddress?: string;
+  codAmount?: number;
+  consignmentId?: string;
+  trackingCode?: string;
+  courierStatus?: string;
   items: ManualSaleItemPayload[];
 }
 
@@ -38,6 +45,13 @@ export interface ManualSaleResponse {
   branchName?: string;
   soldBy?: string;
   note?: string;
+  recipientName?: string | null;
+  recipientPhone?: string | null;
+  recipientAddress?: string | null;
+  codAmount?: number | null;
+  consignmentId?: string | null;
+  trackingCode?: string | null;
+  courierStatus?: string | null;
   createdAt: string;
   items: ManualSaleItemResponse[];
 }

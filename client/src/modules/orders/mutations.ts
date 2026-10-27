@@ -95,3 +95,28 @@ export const useCancelOrderMutation = (options?: any) => {
     ...options,
   });
 };
+
+export const useEntrySteadfastMutation = (options?: any) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (orderId: number) => ordersAPI.entrySteadfast(orderId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ORDERS_QUERY_KEYS.all });
+    },
+    ...options,
+  });
+};
+
+export const useSyncSteadfastStatusMutation = (options?: any) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (orderId: number) => ordersAPI.getSteadfastStatus(orderId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ORDERS_QUERY_KEYS.all });
+    },
+    ...options,
+  });
+};
+

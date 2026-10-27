@@ -33,6 +33,13 @@ export interface Order {
   paymentStatus?: PaymentStatus | string;
   notes?: string;
   trackingNumber?: string;
+  consignmentId?: string;
+  trackingCode?: string;
+  courierStatus?: string;
+  steadfastEntry?: boolean;
+  codAmount?: number;
+  manualSaleId?: number;
+  channel?: string;
   trackingEvents?: OrderTrackingEvent[];
   createdAt: string;
   updatedAt: string;

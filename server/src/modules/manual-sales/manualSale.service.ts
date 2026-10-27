@@ -151,6 +151,13 @@ export class ManualSaleService {
           branchName: data.branchName,
           note: data.note,
           soldBy: resolvedSoldBy,
+          recipientName: data.recipientName,
+          recipientPhone: data.recipientPhone,
+          recipientAddress: data.recipientAddress,
+          codAmount: data.codAmount !== undefined ? data.codAmount : totalAmount,
+          consignmentId: data.consignmentId,
+          trackingCode: data.trackingCode,
+          courierStatus: data.courierStatus,
           items: {
             create: lineItems.map((item) => ({
               productId: item.productId,
@@ -177,11 +184,12 @@ export class ManualSaleService {
       await tx.order.create({
         data: {
           orderNumber: saleNumber,
+          manualSaleId: sale.id,
           channel: 'POS',
-          status: 'PENDING',
-          shippingName: orderBranchName,
-          shippingPhone: orderBranchPhone,
-          shippingAddress: orderBranchAddress,
+          status: 'CONFIRMED',
+          shippingName: data.recipientName || orderBranchName,
+          shippingPhone: data.recipientPhone || orderBranchPhone,
+          shippingAddress: data.recipientAddress || orderBranchAddress,
           shippingCity: orderBranchCity,
           shippingCountry: 'Bangladesh',
           subtotal: totalAmount,
@@ -190,6 +198,11 @@ export class ManualSaleService {
           taxAmount: 0,
           total: totalAmount,
           currency: 'BDT',
+          codAmount: data.codAmount !== undefined ? data.codAmount : totalAmount,
+          consignmentId: data.consignmentId,
+          trackingCode: data.trackingCode,
+          courierStatus: data.courierStatus,
+          steadfastEntry: Boolean(data.consignmentId),
           notes: data.note ? `${data.note} (Sold by: ${resolvedSoldBy})` : `Sale recorded at ${orderBranchName} by ${resolvedSoldBy}`,
           ...(staffUserId ? { processedBy: staffUserId } : {}),
           items: {
@@ -204,8 +217,8 @@ export class ManualSaleService {
           },
           trackingEvents: {
             create: {
-              status: 'PENDING',
-              title: 'Order placed',
+              status: 'CONFIRMED',
+              title: 'Sale confirmed',
               description: `Direct sale recorded at ${orderBranchName} by ${resolvedSoldBy}`,
             },
           },

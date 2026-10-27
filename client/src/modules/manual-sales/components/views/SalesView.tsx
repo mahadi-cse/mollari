@@ -14,6 +14,7 @@ import toast from 'react-hot-toast';
 import { useDashboardLocale } from '@/modules/dashboard/locales/DashboardLocaleContext';
 import BarcodeScannerModal from '@/modules/dashboard/components/BarcodeScannerModal';
 import { useSiteSettings } from '@/modules/homepage';
+import { Truck } from 'lucide-react';
 
 interface SalesViewProps {
   products: Product[];
@@ -72,6 +73,14 @@ export default function SalesView({
   const [showPrintToast, setShowPrintToast] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [viewSaleModal, setViewSaleModal] = useState<any | null>(null);
+
+  // Steadfast Delivery Fields
+  const [isCourierDelivery, setIsCourierDelivery] = useState(true);
+  const [recipientName, setRecipientName] = useState('');
+  const [recipientPhone, setRecipientPhone] = useState('');
+  const [recipientAddress, setRecipientAddress] = useState('');
+  const [deliveryNote, setDeliveryNote] = useState('');
+  const [codAmount, setCodAmount] = useState<number | ''>('');
 
   useEffect(() => {
     if (showPrintToast) {
@@ -207,6 +216,14 @@ export default function SalesView({
               <td><strong>Served By:</strong> ${sale.soldBy || 'Staff'}</td>
               <td class="text-right"><strong>Time:</strong> ${formattedDate.split(',')[1]?.trim() || ''}</td>
             </tr>
+            ${(sale.recipientName || sale.recipientPhone) ? `
+            <tr>
+              <td colspan="2" style="padding-top: 4px; font-size: 10px;">
+                <strong>Delivery To:</strong> ${sale.recipientName || ''} (${sale.recipientPhone || ''})<br/>
+                ${sale.recipientAddress ? `<span style="color: #444;">${sale.recipientAddress}</span>` : ''}
+              </td>
+            </tr>
+            ` : ''}
           </table>
 
           <table class="items-table">
@@ -736,12 +753,33 @@ export default function SalesView({
 
   const handleConfirm = async () => {
     if (lineItems.length > 0 && !hasInvalidLine) {
+      if (isCourierDelivery) {
+        if (!recipientName.trim()) {
+          toast.error('Recipient name is required for courier delivery');
+          return;
+        }
+        if (!recipientPhone.trim()) {
+          toast.error('Recipient phone is required for courier delivery');
+          return;
+        }
+        if (!recipientAddress.trim()) {
+          toast.error('Recipient address is required for courier delivery');
+          return;
+        }
+      }
+
       try {
         const result = await createManualSaleMutation.mutateAsync({
           soldBy: session?.user?.name || session?.user?.email || t.sales.staff,
-          note: t.manualSale,
+          note: deliveryNote.trim() || t.manualSale,
           branchId: Number(saleBranchId),
           branchName: activeBranches.find((b) => b.id === Number(saleBranchId))?.name || t.sales.main,
+          ...(isCourierDelivery ? {
+            recipientName: recipientName.trim(),
+            recipientPhone: recipientPhone.trim(),
+            recipientAddress: recipientAddress.trim(),
+            codAmount: codAmount !== '' ? Number(codAmount) : grandTotal,
+          } : {}),
           items: lineItems.map((item) => ({
             productId: item.productId,
             quantity: item.qty,
@@ -757,6 +795,12 @@ export default function SalesView({
         }
         setSearchQuery('');
         setLineItems([]);
+        setIsCourierDelivery(true);
+        setRecipientName('');
+        setRecipientPhone('');
+        setRecipientAddress('');
+        setDeliveryNote('');
+        setCodAmount('');
       } catch {
         toast.error(t.sales.failedRecord);
       }
@@ -1395,6 +1439,119 @@ export default function SalesView({
                 </div>
               </div>
 
+              {/* Courier Delivery Section (Steadfast) */}
+              <div
+                className="rounded-xl border p-3.5 mb-3.5 transition-all"
+                style={{
+                  borderColor: isCourierDelivery ? '#f472b6' : Theme.border,
+                  background: isCourierDelivery ? '#fffbfd' : '#fff',
+                }}
+              >
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isCourierDelivery}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setIsCourierDelivery(checked);
+                      if (checked && codAmount === '') {
+                        setCodAmount(grandTotal);
+                      }
+                    }}
+                    className="w-4 h-4 rounded text-pink-600 focus:ring-pink-500 accent-pink-600 cursor-pointer"
+                  />
+                  <div className="flex items-center gap-1.5 font-semibold text-xs" style={{ color: Theme.fg }}>
+                    <Truck className="w-4 h-4 text-pink-600" />
+                    <span>Courier Delivery (Steadfast)</span>
+                    <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-pink-50 text-pink-700 border border-pink-200">
+                      COD / Shipping
+                    </span>
+                  </div>
+                </label>
+
+                {isCourierDelivery && (
+                  <div className="mt-3.5 pt-3 border-t border-zinc-100 space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-zinc-600 mb-1">
+                          Recipient Name <span className="text-pink-600">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={100}
+                          value={recipientName}
+                          onChange={(e) => setRecipientName(e.target.value)}
+                          placeholder="Customer / Recipient Full Name"
+                          className="w-full px-3 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-pink-100 transition-all bg-white"
+                          style={{ borderColor: Theme.border }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-zinc-600 mb-1">
+                          Recipient Phone <span className="text-pink-600">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={40}
+                          value={recipientPhone}
+                          onChange={(e) => setRecipientPhone(e.target.value)}
+                          placeholder="e.g. 017xxxxxxxx"
+                          className="w-full px-3 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-pink-100 transition-all bg-white"
+                          style={{ borderColor: Theme.border }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-zinc-600 mb-1">
+                        Delivery Address <span className="text-pink-600">*</span>
+                      </label>
+                      <textarea
+                        rows={2}
+                        maxLength={490}
+                        value={recipientAddress}
+                        onChange={(e) => setRecipientAddress(e.target.value)}
+                        placeholder="House, Road, Area, District, Police Station"
+                        className="w-full px-3 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-pink-100 transition-all bg-white resize-none"
+                        style={{ borderColor: Theme.border }}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-zinc-600 mb-1">
+                          COD Amount (৳)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={codAmount !== '' ? codAmount : (lineItems.length > 0 ? parseFloat(grandTotal.toFixed(2)) : 0)}
+                          onChange={(e) => setCodAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                          placeholder={String(grandTotal)}
+                          className="w-full px-3 py-1.5 border rounded-lg text-xs font-semibold outline-none focus:ring-2 focus:ring-pink-100 transition-all bg-white"
+                          style={{ borderColor: Theme.border }}
+                        />
+                        <span className="text-[10px] text-zinc-400 mt-0.5 block">Courier collection amount</span>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-zinc-600 mb-1">
+                          Delivery Note / Instructions
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={480}
+                          value={deliveryNote}
+                          onChange={(e) => setDeliveryNote(e.target.value)}
+                          placeholder="e.g. Call before delivery"
+                          className="w-full px-3 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-pink-100 transition-all bg-white"
+                          style={{ borderColor: Theme.border }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Action Buttons */}
               <div className={`flex gap-2 ${isMobile ? 'flex-col-reverse' : 'justify-end'}`}>
                 <Btn
@@ -1403,6 +1560,12 @@ export default function SalesView({
                     setSearchQuery('');
                     setShowDropdown(false);
                     setLineItems([]);
+                    setIsCourierDelivery(true);
+                    setRecipientName('');
+                    setRecipientPhone('');
+                    setRecipientAddress('');
+                    setDeliveryNote('');
+                    setCodAmount('');
                   }}
                   className={isMobile ? 'w-full' : ''}
                 >
@@ -1520,7 +1683,18 @@ export default function SalesView({
                       style={{ borderColor: Theme.border }}
                     >
                       <td className="px-2 py-2.5 font-semibold" style={{ color: Theme.primary }}>
-                        {sale.saleNumber}
+                        <div>{sale.saleNumber}</div>
+                        {(sale.recipientName || sale.recipientPhone) && (
+                          <div className="mt-1 flex items-center gap-1 text-[10px] text-zinc-600 font-normal">
+                            <Truck className="w-3 h-3 text-pink-600 flex-shrink-0" />
+                            <span className="truncate max-w-[130px]">{sale.recipientName || sale.recipientPhone}</span>
+                          </div>
+                        )}
+                        {(sale.consignmentId || sale.trackingCode) && (
+                          <div className="text-[9px] font-mono text-indigo-600 font-normal">
+                            CID: {sale.consignmentId || sale.trackingCode}
+                          </div>
+                        )}
                       </td>
                       <td className="px-2 py-2.5" style={{ color: Theme.fg }}>
                         <div className="flex flex-col gap-0.5">
@@ -1707,6 +1881,41 @@ export default function SalesView({
                 </div>
               )}
             </div>
+
+            {/* Courier Delivery Details */}
+            {(viewSaleModal.recipientName || viewSaleModal.recipientPhone || viewSaleModal.consignmentId) && (
+              <div className="p-4 bg-pink-50/40 border-b text-xs" style={{ borderColor: Theme.border }}>
+                <div className="flex items-center gap-1.5 font-bold text-pink-700 text-[11px] uppercase tracking-wider mb-2">
+                  <Truck className="w-3.5 h-3.5" />
+                  <span>Steadfast Delivery Information</span>
+                  {viewSaleModal.courierStatus && (
+                    <span className="ml-auto px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-pink-100 text-pink-800 border border-pink-200">
+                      {viewSaleModal.courierStatus}
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div>
+                    <span className="text-zinc-400 block text-[10px] uppercase font-bold">Recipient</span>
+                    <span className="font-semibold text-zinc-800">{viewSaleModal.recipientName || 'N/A'}</span>
+                    <span className="text-zinc-500 block text-[11px]">{viewSaleModal.recipientPhone || ''}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400 block text-[10px] uppercase font-bold">Address</span>
+                    <span className="font-medium text-zinc-700 block text-[11px]">{viewSaleModal.recipientAddress || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400 block text-[10px] uppercase font-bold">COD / Consignment</span>
+                    <span className="font-bold text-zinc-900 block">৳{viewSaleModal.codAmount ?? viewSaleModal.totalAmount}</span>
+                    {(viewSaleModal.consignmentId || viewSaleModal.trackingCode) && (
+                      <span className="text-[10px] font-mono text-indigo-600 block mt-0.5">
+                        CID: {viewSaleModal.consignmentId || viewSaleModal.trackingCode}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Items Table */}
             <div className="p-4 max-h-[50vh] overflow-y-auto">

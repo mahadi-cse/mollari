@@ -5,8 +5,10 @@ import { useRouter } from 'next/navigation';
 import { Theme, formatCurrency } from '@/modules/dashboard/utils/theme';
 import { useResponsive } from '@/shared/hooks/useResponsive';
 import { Card, Btn, Badge } from '@/shared/components/ui/Primitives';
-import type { Product, Order } from '@/modules/dashboard/types';
-import { useListOrders, useUpdateOrderStatusMutation } from '@/modules/orders';
+import { useListOrders, useUpdateOrderStatusMutation, useEntrySteadfastMutation, useSyncSteadfastStatusMutation } from '@/modules/orders';
+import { useSiteSettings } from '@/modules/homepage';
+import toast from 'react-hot-toast';
+import { Truck, Printer, ChevronDown, ChevronUp, CheckCircle2, RefreshCw } from 'lucide-react';
 import { confirmDialog } from '@/shared/lib/confirmDialog';
 import type { Order as RealOrder } from '@/modules/orders/types';
 import { useDashboardLocale } from '@/modules/dashboard/locales/DashboardLocaleContext';
@@ -29,8 +31,8 @@ const getStatusStyle = (status: string) => {
 };
 
 interface OrdersViewProps {
-  products?: Product[];
-  orders?: Order[];
+  products?: any[];
+  orders?: any[];
 }
 
 type OrderFilter = 'all' | 'pending' | 'shipped' | 'delivered' | 'cancelled';
@@ -45,6 +47,8 @@ export default function OrdersView({ products, orders }: OrdersViewProps) {
   const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
   const [pendingStatus, setPendingStatus] = useState<Record<number, RealOrderStatus>>({});
 
+  const { data: siteSettings } = useSiteSettings();
+
   // Real orders from API
   const { data: realOrdersData, isLoading: realOrdersLoading, refetch: refetchOrders } = useListOrders(
     { page: 1, limit: 100, ...(orderFilter !== 'all' ? { status: orderFilter.toUpperCase() } : {}) },
@@ -55,6 +59,170 @@ export default function OrdersView({ products, orders }: OrdersViewProps) {
   const updateStatusMutation = useUpdateOrderStatusMutation({
     onSuccess: () => { void refetchOrders(); },
   });
+
+  const entrySteadfastMutation = useEntrySteadfastMutation({
+    onSuccess: (data: any) => {
+      toast.success(`Entered into Steadfast! CID #${data.consignmentId || data.trackingCode}`);
+      void refetchOrders();
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || err?.message || 'Failed to enter into Steadfast');
+    },
+  });
+
+  const handleSteadfastEntry = async (orderId: number) => {
+    try {
+      await entrySteadfastMutation.mutateAsync(orderId);
+    } catch {
+      // handled in onError
+    }
+  };
+
+  const syncSteadfastStatusMutation = useSyncSteadfastStatusMutation({
+    onSuccess: (data: any) => {
+      toast.success(`Steadfast status: ${data.liveStatus}`);
+      void refetchOrders();
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || err?.message || 'Failed to fetch Steadfast status');
+    },
+  });
+
+  const handleSyncSteadfastStatus = async (orderId: number) => {
+    try {
+      await syncSteadfastStatusMutation.mutateAsync(orderId);
+    } catch {
+      // handled in onError
+    }
+  };
+
+  const handlePrintOrder = (order: any) => {
+    const store = {
+      storeName: siteSettings?.storeName || 'Mollari',
+      tagline: siteSettings?.tagline || 'Premium Quality Cosmetics & Skincare',
+      address: siteSettings?.contactAddress || '',
+      phone: siteSettings?.contactPhone || '',
+    };
+
+    const formattedDate = order.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A';
+    const itemsHtml = (order.items || []).map((item: any) => `
+      <tr>
+        <td style="padding: 4px 0; font-size: 11px; font-family: monospace; line-height: 1.2;">
+          ${item.productName || item.product?.name || 'Item'}
+        </td>
+        <td style="padding: 4px 0; text-align: center; font-size: 11px; font-family: monospace;">${item.quantity}</td>
+        <td style="padding: 4px 0; text-align: right; font-size: 11px; font-family: monospace;">৳${item.unitPrice}</td>
+        <td style="padding: 4px 0; text-align: right; font-size: 11px; font-family: monospace;">৳${item.totalPrice || (item.quantity * item.unitPrice)}</td>
+      </tr>
+    `).join('');
+
+    const receiptHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${order.orderNumber || 'Invoice'}</title>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <style>
+            @page { size: 80mm auto; margin: 0; }
+            body { font-family: Arial, sans-serif; color: #000; margin: 10px; padding: 0; width: 70mm; }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .header { margin-bottom: 12px; border-bottom: 1px dashed #000; padding-bottom: 8px; }
+            .title { font-size: 16px; font-weight: bold; }
+            .subtitle { font-size: 10px; color: #555; }
+            .info-table, .items-table, .totals-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+            .info-table td { padding: 2px 0; }
+            .items-table { margin: 8px 0; border-top: 1px dashed #000; border-bottom: 1px dashed #000; }
+            .items-table th { padding: 4px 0; font-size: 10px; font-weight: bold; border-bottom: 1px solid #ccc; }
+            .totals-table td { padding: 2px 0; }
+            .footer { border-top: 1px dashed #000; padding-top: 8px; margin-top: 8px; font-size: 9px; color: #333; }
+          </style>
+          <script>window.onload = function() { setTimeout(function() { window.print(); }, 150); };<\/script>
+        </head>
+        <body>
+          <div class="header text-center">
+            <div class="title">${store.storeName}</div>
+            <div class="subtitle">${store.tagline}</div>
+            ${store.address ? `<div class="subtitle">${store.address}</div>` : ''}
+            ${store.phone ? `<div class="subtitle">${store.phone}</div>` : ''}
+          </div>
+
+          <table class="info-table">
+            <tr>
+              <td><strong>Order:</strong> #${order.orderNumber}</td>
+              <td class="text-right"><strong>Date:</strong> ${formattedDate.split(',')[0]}</td>
+            </tr>
+            <tr>
+              <td><strong>Customer:</strong> ${order.shippingName || 'N/A'}</td>
+              <td class="text-right"><strong>Phone:</strong> ${order.shippingPhone || ''}</td>
+            </tr>
+            ${order.shippingAddress ? `
+            <tr>
+              <td colspan="2" style="font-size: 9px; padding-top: 2px;"><strong>Address:</strong> ${order.shippingAddress}</td>
+            </tr>
+            ` : ''}
+            ${order.consignmentId ? `
+            <tr>
+              <td colspan="2" style="font-size: 9px; padding-top: 2px;"><strong>Steadfast CID:</strong> ${order.consignmentId}</td>
+            </tr>
+            ` : ''}
+          </table>
+
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th style="width: 45%; text-align: left;">Item</th>
+                <th style="width: 15%; text-align: center;">Qty</th>
+                <th style="width: 20%; text-align: right;">Price</th>
+                <th style="width: 20%; text-align: right;">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+
+          <table class="totals-table">
+            <tr style="font-size: 12px; font-weight: bold;">
+              <td>Total Amount:</td>
+              <td class="text-right">৳${order.total}</td>
+            </tr>
+            ${order.codAmount ? `
+            <tr style="font-size: 11px;">
+              <td>COD Collection:</td>
+              <td class="text-right">৳${order.codAmount}</td>
+            </tr>
+            ` : ''}
+          </table>
+
+          <div class="footer text-center">
+            <p style="margin: 0;">Thank you for shopping with us!</p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    try {
+      const blob = new Blob([receiptHtml], { type: 'text/html;charset=utf-8' });
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+    } catch {
+      const pw = window.open('', '_blank');
+      if (pw) {
+        pw.document.open();
+        pw.document.write(receiptHtml);
+        pw.document.close();
+      }
+    }
+  };
 
   const STEPS = [
     { status: 'PENDING',   label: (t as any).orders?.placed || (t as any).ecommerce?.placed || 'Placed',    icon: '🛒' },
@@ -199,10 +367,12 @@ export default function OrdersView({ products, orders }: OrdersViewProps) {
                 <div key={order.id} className="transition-colors hover:bg-gray-50/50">
                   {/* Collapsed row */}
                   <div
-                    className="flex items-center gap-3 px-4 py-3.5 cursor-pointer"
-                    onClick={() => setExpandedOrderId(isExpanded ? null : order.id)}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3.5 hover:bg-gray-50/80 transition-colors"
                   >
-                    <div className="min-w-0 flex-1">
+                    <div
+                      className="min-w-0 flex-1 cursor-pointer"
+                      onClick={() => setExpandedOrderId(isExpanded ? null : order.id)}
+                    >
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-[13px] font-bold" style={{ color: Theme.primary }}>
                           #{order.orderNumber}
@@ -220,6 +390,19 @@ export default function OrdersView({ products, orders }: OrdersViewProps) {
                           {order.shippingName || (order.customer ? `${order.customer.firstName || order.customer.user?.firstName || ''} ${order.customer.lastName || order.customer.user?.lastName || ''}`.trim() : 'N/A')}
                         </span>
                         <Badge label={localizedStatusLabel} bg={statusInfo.bg} color={statusInfo.color} />
+
+                        {/* Steadfast Status Badge */}
+                        {order.courierStatus ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            <Truck className="w-3 h-3" />
+                            <span>Steadfast: {order.courierStatus}</span>
+                          </span>
+                        ) : order.steadfastEntry ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Steadfast: In Review</span>
+                          </span>
+                        ) : null}
                       </div>
                       <div className="mt-1 flex items-center gap-2 text-[11px] flex-wrap" style={{ color: Theme.mutedFg }}>
                         <span>
@@ -241,18 +424,90 @@ export default function OrdersView({ products, orders }: OrdersViewProps) {
                               })
                             : 'N/A'}
                         </span>
+                        {order.shippingPhone && order.shippingPhone !== 'N/A' && (
+                          <>
+                            <span>·</span>
+                            <span>📞 {order.shippingPhone}</span>
+                          </>
+                        )}
+                        {order.consignmentId && (
+                          <>
+                            <span>·</span>
+                            <span className="font-mono text-indigo-600 font-semibold">CID: {order.consignmentId}</span>
+                          </>
+                        )}
                       </div>
                     </div>
-                    <span
-                      style={{
-                        color: Theme.mutedFg,
-                        fontSize: 13,
-                        transition: 'transform 0.2s',
-                        transform: isExpanded ? 'rotate(90deg)' : 'none',
-                      }}
-                    >
-                      ▶
-                    </span>
+
+                    {/* Action buttons on row: Steadfast Entry/Sync + Print + Details */}
+                    <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                      {order.consignmentId?.startsWith('SF-') ? (
+                        <button
+                          type="button"
+                          disabled={entrySteadfastMutation.isPending && (entrySteadfastMutation.variables as any) === order.id}
+                          onClick={() => handleSteadfastEntry(order.id)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-pink-600 hover:bg-pink-700 text-white shadow-sm transition disabled:opacity-50 cursor-pointer"
+                          title="Click to book live parcel on Steadfast"
+                        >
+                          <Truck className="w-3.5 h-3.5" />
+                          <span>
+                            {entrySteadfastMutation.isPending && (entrySteadfastMutation.variables as any) === order.id
+                              ? 'Booking...'
+                              : 'Book Live'}
+                          </span>
+                        </button>
+                      ) : order.steadfastEntry || order.consignmentId ? (
+                        <div className="flex items-center gap-1">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Entered</span>
+                          </span>
+                          <button
+                            type="button"
+                            disabled={syncSteadfastStatusMutation.isPending && (syncSteadfastStatusMutation.variables as any) === order.id}
+                            onClick={() => handleSyncSteadfastStatus(order.id)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition cursor-pointer"
+                            title="Check live delivery status from Steadfast"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 ${syncSteadfastStatusMutation.isPending && (syncSteadfastStatusMutation.variables as any) === order.id ? 'animate-spin' : ''}`} />
+                            <span className="hidden lg:inline">Sync</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={entrySteadfastMutation.isPending && (entrySteadfastMutation.variables as any) === order.id}
+                          onClick={() => handleSteadfastEntry(order.id)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-pink-600 hover:bg-pink-700 text-white shadow-sm transition disabled:opacity-50 cursor-pointer"
+                        >
+                          <Truck className="w-3.5 h-3.5" />
+                          <span>
+                            {entrySteadfastMutation.isPending && (entrySteadfastMutation.variables as any) === order.id
+                              ? 'Sending...'
+                              : 'Entry Steadfast'}
+                          </span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handlePrintOrder(order)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700 transition cursor-pointer"
+                        title="Print Receipt"
+                      >
+                        <Printer className="w-3.5 h-3.5 text-zinc-600" />
+                        <span className="hidden md:inline">Print</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setExpandedOrderId(isExpanded ? null : order.id)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700 transition cursor-pointer"
+                      >
+                        <span>{isExpanded ? 'Collapse' : 'Details'}</span>
+                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Expanded Detail */}
@@ -310,8 +565,76 @@ export default function OrdersView({ products, orders }: OrdersViewProps) {
                             </div>
                           )}
 
-                          {/* Order Details Grid */}
-                          <div className="rounded-lg border bg-white p-3 text-[11px] space-y-2" style={{ borderColor: Theme.border }}>
+                            {/* Order Details Grid */}
+                          <div className="rounded-lg border bg-white p-3 text-[11px] space-y-2.5" style={{ borderColor: Theme.border }}>
+                            {/* Steadfast Courier Info Box in Expanded View */}
+                            <div className="p-2.5 rounded-lg bg-pink-50/50 border border-pink-100 space-y-1.5">
+                              <div className="flex items-center justify-between text-xs font-bold text-pink-800">
+                                <div className="flex items-center gap-1.5">
+                                  <Truck className="w-4 h-4 text-pink-600" />
+                                  <span>Steadfast Courier Delivery</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] px-2 py-0.5 rounded-full uppercase font-bold bg-pink-100 text-pink-700">
+                                    {order.courierStatus || (order.steadfastEntry ? 'In Review' : 'Not Entered')}
+                                  </span>
+                                  {order.consignmentId?.startsWith('SF-') ? (
+                                    <button
+                                      type="button"
+                                      disabled={entrySteadfastMutation.isPending && (entrySteadfastMutation.variables as any) === order.id}
+                                      onClick={() => handleSteadfastEntry(order.id)}
+                                      className="px-2 py-0.5 rounded text-[10px] font-bold bg-pink-600 hover:bg-pink-700 text-white transition disabled:opacity-50 cursor-pointer"
+                                    >
+                                      {entrySteadfastMutation.isPending && (entrySteadfastMutation.variables as any) === order.id
+                                        ? 'Booking...'
+                                        : 'Book Live'}
+                                    </button>
+                                  ) : (order.steadfastEntry || order.consignmentId) ? (
+                                    <button
+                                      type="button"
+                                      disabled={syncSteadfastStatusMutation.isPending && (syncSteadfastStatusMutation.variables as any) === order.id}
+                                      onClick={() => handleSyncSteadfastStatus(order.id)}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition cursor-pointer"
+                                    >
+                                      <RefreshCw className={`w-3 h-3 ${syncSteadfastStatusMutation.isPending && (syncSteadfastStatusMutation.variables as any) === order.id ? 'animate-spin' : ''}`} />
+                                      <span>Check Live Status</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      disabled={entrySteadfastMutation.isPending && (entrySteadfastMutation.variables as any) === order.id}
+                                      onClick={() => handleSteadfastEntry(order.id)}
+                                      className="px-2 py-0.5 rounded text-[10px] font-bold bg-pink-600 hover:bg-pink-700 text-white transition disabled:opacity-50 cursor-pointer"
+                                    >
+                                      {entrySteadfastMutation.isPending && (entrySteadfastMutation.variables as any) === order.id
+                                        ? 'Sending...'
+                                        : 'Entry Steadfast'}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-zinc-700">
+                                <div>
+                                  <span className="text-zinc-400 block text-[9px] uppercase font-bold">Consignment ID</span>
+                                  <span className="font-mono font-semibold">{order.consignmentId || '—'}</span>
+                                </div>
+                                <div>
+                                  <span className="text-zinc-400 block text-[9px] uppercase font-bold">Tracking Code</span>
+                                  <span className="font-mono font-semibold">{order.trackingCode || '—'}</span>
+                                </div>
+                                <div>
+                                  <span className="text-zinc-400 block text-[9px] uppercase font-bold">COD Collection</span>
+                                  <span className="font-bold">৳{order.codAmount ?? order.total}</span>
+                                </div>
+                                <div>
+                                  <span className="text-zinc-400 block text-[9px] uppercase font-bold">Entry Status</span>
+                                  <span className="font-semibold text-emerald-700">
+                                    {order.steadfastEntry ? '✓ Sent to Courier' : 'Pending Booking'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
                             <div className="flex flex-wrap gap-x-4 gap-y-1" style={{ color: Theme.mutedFg }}>
                               <span>📍 <strong className="text-gray-800">{order.shippingName}</strong>, {order.shippingAddress || ''} {order.shippingCity ? `(${order.shippingCity})` : ''}</span>
                               {order.shippingPhone && <span>📞 {order.shippingPhone}</span>}

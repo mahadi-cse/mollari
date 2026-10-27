@@ -1,0 +1,395 @@
+# Packzy Parcel Delivery API — Agent Reference
+
+## 1. Overview
+
+**Base URL:** `https://portal.packzy.com/api/v1`
+
+This API supports parcel booking, delivery status tracking, pickup requests, returns, balance inquiries, payments, police station lookups, and fraud checks.
+
+### Endpoint Summary
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/ping` | Check API availability; no authentication required |
+| POST | `/create_order` | Book one parcel |
+| POST | `/create_order/bulk-order` | Book up to 500 parcels |
+| POST | `/create_order/bulk-order/extended` | Bulk booking with per-field validation messages |
+| GET | `/status_by_cid/{consignment_id}` | Get parcel status by consignment ID |
+| GET | `/status_with_return_status_by_cid/{consignment_id}` | Get parcel and return status |
+| GET | `/status_by_invoice/{invoice}` | Get parcel status by invoice |
+| GET | `/status_by_trackingcode/{tracking_code}` | Get parcel status by tracking code |
+| GET | `/trackings_by_invoice/{invoice}` | Get parcel tracking history |
+| POST | `/create_pickup_request` | Request parcel pickup |
+| POST | `/create_return_request` | Request a parcel return |
+| GET | `/get_return_requests` | List return requests |
+| GET | `/get_return_request/{id}` | Get a specific return request |
+| GET | `/get_balance` | Get current balance |
+| GET | `/payments` | List payouts |
+| GET | `/payments/{payment_id}` | Get payout details |
+| GET | `/police_stations` | Get supported police stations and districts |
+| GET | `/fraud_check/score/{phone}` | Check a customer's delivery history |
+
+Total: 18 endpoints.
+
+---
+
+## 2. Authentication
+
+All endpoints require authentication except `GET /ping`.
+
+### Required Headers
+
+```http
+Api-Key: YOUR_API_KEY
+Secret-Key: YOUR_SECRET_KEY
+Content-Type: application/json
+```
+
+Rules:
+
+- Send `Api-Key` and `Secret-Key` with every authenticated request.
+- Use `Content-Type: application/json` for POST requests.
+- There is no login flow or token-refresh mechanism.
+- API keys are associated with individual business profiles.
+- A profile's keys can access only that profile's parcels and payouts.
+- Multiple named keys can be created for separate integrations.
+- Keys can be issued or revoked from the API keys section of the portal.
+
+### Rate Limits
+
+- General API requests: 1,000 requests per minute.
+- Parcel booking requests: 6,000 requests per minute.
+- More than 10 authentication failures within five minutes can result in HTTP 429 for 60 minutes.
+- Repeated invalid authentication attempts may trigger this restriction even after the correct credentials are supplied.
+
+**Agent rule:** Never retry HTTP 401 indefinitely. Check credentials and profile ownership first.
+
+---
+
+## 3. Service Availability
+
+### GET `/ping`
+
+Purpose: Verify that the API is reachable.
+
+- Authentication: Not required.
+- Run this check before debugging authenticated requests.
+- If it succeeds, the server address and network connection are reachable.
+- If it fails, investigate connectivity or service availability before debugging API credentials.
+
+---
+
+## 4. Booking Parcels
+
+### 4.1 Create One Parcel
+
+**POST `/create_order`**
+
+Creates a single parcel. This operation creates a real booking.
+
+Example using Node.js:
+
+```javascript
+const res = await fetch(
+  'https://portal.packzy.com/api/v1/create_order',
+  {
+    method: 'POST',
+    headers: {
+      'Api-Key': 'YOUR_API_KEY',
+      'Secret-Key': 'YOUR_SECRET_KEY',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      invoice: 'ORD-10231',
+      recipient_name: 'Jahid Hasan',
+      recipient_phone: '01712345678',
+      recipient_address: 'Dhanmondi, Dhaka',
+      cod_amount: 1060,
+    }),
+  }
+);
+
+const data = await res.json();
+const { consignment } = data;
+```
+
+Important:
+
+- Replace placeholder credentials with valid credentials.
+- Use a real invoice value that is appropriate for a real booking.
+- The example creates a real parcel; it is not a dry run.
+- Do not assume the response contains a successful booking merely because the HTTP request completed. Inspect the response body.
+- The example identifies `consignment` as a response field, but its complete schema is not provided here.
+
+### 4.2 Bulk Booking
+
+**POST `/create_order/bulk-order`**
+
+- Creates up to 500 parcels in one request.
+- Follow the endpoint's required request schema.
+- The complete bulk payload schema is not specified in this reference.
+
+**POST `/create_order/bulk-order/extended`**
+
+- Performs bulk booking with per-field validation messages instead of validation codes.
+- Use this endpoint when detailed field-level validation feedback is useful.
+
+---
+
+## 5. Parcel Status and Tracking
+
+### Available Endpoints
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /status_by_cid/{consignment_id}` | Current status by consignment ID |
+| `GET /status_with_return_status_by_cid/{consignment_id}` | Current status plus return progress |
+| `GET /status_by_invoice/{invoice}` | Current status by merchant invoice |
+| `GET /status_by_trackingcode/{tracking_code}` | Current status by tracking code |
+| `GET /trackings_by_invoice/{invoice}` | Full tracking history by invoice |
+
+### Status Query Rules
+
+- Use whichever identifier is available.
+- Status responses are cached for 60 seconds.
+- Polling more frequently than once per 60 seconds may return no new information.
+- Prefer webhooks for status updates when supported and configured.
+- The full webhook registration and payload schemas are not specified in this reference.
+
+---
+
+## 6. Pickup Requests
+
+### POST `/create_pickup_request`
+
+Purpose: Ask a rider to collect booked parcels from one of the merchant's addresses.
+
+The exact request fields and response schema are not provided in this reference.
+
+---
+
+## 7. Returns
+
+### POST `/create_return_request`
+
+Purpose: Request that a parcel be returned to the merchant before delivery is completed.
+
+### GET `/get_return_requests`
+
+Purpose: List return requests.
+
+- Ordered newest first.
+- Ten records per page.
+
+### GET `/get_return_request/{id}`
+
+Purpose: Retrieve one return request and the associated parcel.
+
+### Return Workflow
+
+A return may progress through processing, rider assignment, and receipt by the merchant. Refer to the return status values below.
+
+---
+
+## 8. Balance and Payments
+
+### GET `/get_balance`
+
+Returns the merchant's current balance.
+
+### GET `/payments`
+
+Returns payout records.
+
+- Ten records per page.
+
+### GET `/payments/{payment_id}`
+
+Returns a specific payout and the parcels settled by that payout.
+
+**Important:** A parcel marked `delivered_approval_pending` is not yet confirmed for accounting purposes.
+
+---
+
+## 9. Lookups and Fraud Checks
+
+### GET `/police_stations`
+
+Returns supported police stations (thanas) and their districts.
+
+### GET `/fraud_check/score/{phone}`
+
+Returns a customer's delivery history, including:
+
+- Deliveries completed.
+- Parcels returned.
+- Reports submitted by other merchants.
+
+Use the phone number in the format expected by the API. The exact accepted format and complete response schema are not specified here.
+
+---
+
+## 10. Input Sanitization and Field Lengths
+
+The API sanitizes certain text fields before storing them.
+
+The following characters are replaced with spaces:
+
+- `{`
+- `}`
+- `;`
+- `<`
+- `>`
+- `$`
+
+### Maximum Field Lengths
+
+| Field | Maximum length |
+|---|---:|
+| `invoice` | 100 characters |
+| `recipient_name` | 100 characters |
+| `recipient_phone` | 40 characters |
+| `recipient_address` | 490 characters |
+| `note` | 480 characters |
+
+Overlong values are truncated rather than rejected.
+
+**Agent rules:**
+
+1. Validate field lengths before sending requests.
+2. Do not assume stored text exactly matches the submitted text.
+3. Do not use the sanitized values as evidence that the original input was preserved.
+4. Validate important invoice and address data before booking.
+
+---
+
+## 11. Delivery Status Reference
+
+### Important Accounting Rule
+
+Any status ending in `_approval_pending` represents a rider-reported outcome that has not yet been confirmed by the accounts team.
+
+Do not treat these statuses as final delivery outcomes.
+
+Wait for `delivered`, `partial_delivered`, or `cancelled` before finalizing the corresponding accounting decision.
+
+### Status Definitions
+
+| Status | Meaning |
+|---|---|
+| `pending` | Booked and with the courier; delivery has not yet been attempted |
+| `in_review` | Newly created parcel awaiting approval |
+| `hold` | Parcel is held, usually because of an address or payment issue |
+| `delivered_approval_pending` | Rider marked delivered; awaiting confirmation |
+| `partial_delivered_approval_pending` | Rider marked partially delivered; awaiting confirmation |
+| `cancelled_approval_pending` | Rider marked cancelled; awaiting confirmation |
+| `unknown_approval_pending` | Outcome awaiting confirmation and not covered by the listed pending states |
+| `delivered` | Delivery confirmed; COD is now owed to the merchant |
+| `partial_delivered` | Partial delivery confirmed |
+| `cancelled` | Non-delivery confirmed; parcel is to be returned |
+| `exceptional` | Lost, damaged, or otherwise outside the normal workflow |
+| `unknown` | Unrecognized state; contact support for clarification |
+
+### Status Handling Logic
+
+1. Read the returned status.
+2. If it ends with `_approval_pending`, treat it as provisional.
+3. If it is `delivered`, `partial_delivered`, or `cancelled`, treat the outcome as confirmed.
+4. If it is `hold`, investigate the underlying issue.
+5. If it is `exceptional` or `unknown`, escalate to support rather than assuming success.
+
+---
+
+## 12. Return Status Reference
+
+These statuses are available through:
+
+`GET /status_with_return_status_by_cid/{consignment_id}`
+
+They apply to parcels that did not fully arrive.
+
+| Return status | Meaning |
+|---|---|
+| `partial_delivered_return_proccessing` | Part delivered; remaining parcel is being prepared for return |
+| `partial_delivered_return_rider_assigned` | Part delivered; rider is returning the remainder |
+| `partial_delivered_return_received` | Part delivered; remainder has been received back |
+| `cancelled_return_proccessing` | Cancelled parcel is being prepared for return |
+| `cancelled_return_rider_assigned` | Rider is returning the cancelled parcel |
+| `cancelled_return_received` | Cancelled parcel has been received back |
+
+Note: The spelling `proccessing` is preserved exactly as documented by the API.
+
+---
+
+## 13. HTTP Response Codes and Error Handling
+
+| HTTP code | Meaning | Recommended action |
+|---|---|---|
+| `200` | Request completed or answered | Inspect the response body; some endpoints may report individual failures inside HTTP 200 |
+| `400` | Malformed or incomplete request | Check the payload, especially the required `data` payload on bulk requests |
+| `401` | Invalid credentials or resource not accessible to this profile | Verify API keys, revocation status, and resource ownership |
+| `403` | Authenticated but currently unauthorized | Check account activation and KYC/ownership verification requirements |
+| `422` | Field validation failed | Read the `errors` object and correct the rejected fields |
+| `429` | Rate limit or authentication-failure restriction | Back off and check whether invalid credentials triggered a temporary block |
+| `500` | Server-side error | Retry cautiously using the same invoice; duplicate invoices are refused |
+
+### Error Handling Rules for Agents
+
+1. Always parse the response body, even when the HTTP status is `200`.
+2. Do not retry `401` requests in an uncontrolled loop.
+3. For `403`, verify account activation and KYC requirements.
+4. For `422`, correct the invalid fields before retrying.
+5. For `429`, respect the rate limit and use backoff.
+6. For `500`, retry cautiously with the same invoice because duplicate invoices are refused.
+7. Do not assume every endpoint returns the same JSON schema; endpoint-specific response schemas must be checked separately.
+
+---
+
+## 14. Webhooks vs. Polling
+
+Parcel status responses are cached for 60 seconds.
+
+Repeated status requests within that window may provide no new information while consuming API quota.
+
+Where supported and configured, prefer webhooks to receive notifications about:
+
+- Parcel status changes.
+- Accepted return lists.
+- Payout events.
+
+The webhook setup endpoint, signature validation mechanism, event payloads, retry policy, and delivery guarantees are not specified in this reference. Do not invent these details.
+
+---
+
+## 15. Recommended Agent Workflow
+
+For a typical parcel integration:
+
+1. **Check connectivity:** Call `GET /ping`.
+2. **Load credentials:** Read the API key and secret from secure configuration or environment variables.
+3. **Validate input:** Check required fields, field lengths, and sanitized characters.
+4. **Book the parcel:** Call `POST /create_order`.
+5. **Inspect the response:** Check both HTTP status and response body.
+6. **Store identifiers:** Persist the invoice and returned consignment/tracking identifiers when available.
+7. **Track status:** Use the appropriate status endpoint or configured webhook.
+8. **Respect caching:** Avoid polling more frequently than the 60-second cache window.
+9. **Handle provisional states:** Do not finalize accounting for `_approval_pending` statuses.
+10. **Reconcile payments:** Use `/get_balance`, `/payments`, and `/payments/{payment_id}`.
+11. **Handle failures safely:** Apply the HTTP error-handling rules and avoid uncontrolled retries.
+
+---
+
+## 16. Information Not Included in This Reference
+
+The following details require the full endpoint-specific API documentation:
+
+- Complete request schemas for every endpoint.
+- Complete response schemas and example error bodies.
+- Bulk-order payload structure.
+- Pagination parameters for list endpoints.
+- Pickup and return request field definitions.
+- Webhook configuration, event schemas, and signature verification.
+- Required phone-number format for fraud checks.
+- Exact success and failure semantics for every endpoint.
+
+**Implementation rule:** Use only documented fields and verified response schemas. Do not invent API parameters, authentication mechanisms, or response properties.

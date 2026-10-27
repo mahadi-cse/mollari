@@ -204,6 +204,23 @@ export const cancelOrder: RequestHandler = asyncHandler(async (req, res) => {
   res.status(204).json(ok(order, 'Order cancelled'));
 });
 
+export const entrySteadfast: RequestHandler = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const order = await orderService.bookSteadfastParcel(Number(id));
+  res.json(ok(order, 'Steadfast booking successful'));
+});
+
+export const getSteadfastStatus: RequestHandler = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const result = await orderService.getSteadfastStatus(Number(id));
+  res.json(ok(result, 'Steadfast status retrieved'));
+});
+
+export const handleSteadfastWebhook: RequestHandler = asyncHandler(async (req, res) => {
+  await orderService.handleSteadfastWebhook(req.body);
+  res.status(200).json({ status: 'success' });
+});
+
 export default {
   listOrders,
   getOrderDetails,
@@ -218,4 +235,7 @@ export default {
   generateInvoice,
   getOrderTracking,
   cancelOrder,
+  entrySteadfast,
+  getSteadfastStatus,
+  handleSteadfastWebhook,
 };

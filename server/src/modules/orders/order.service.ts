@@ -643,6 +643,315 @@ export class OrderService {
       paymentStatus: order.payment?.status,
     };
   }
+
+  async syncMissingManualSales() {
+    const unlinkedSales = await prisma.manualSale.findMany({
+      where: { order: null },
+      include: { items: true },
+      take: 50,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    for (const sale of unlinkedSales) {
+      try {
+        await prisma.order.create({
+          data: {
+            orderNumber: sale.saleNumber,
+            manualSaleId: sale.id,
+            channel: 'POS',
+            status: 'CONFIRMED',
+            shippingName: sale.recipientName || 'Walk-in Customer',
+            shippingPhone: sale.recipientPhone || 'N/A',
+            shippingAddress: sale.recipientAddress || sale.branchName || 'In-Store',
+            shippingCity: 'Dhaka',
+            shippingCountry: 'Bangladesh',
+            subtotal: sale.totalAmount,
+            discountAmount: 0,
+            shippingCharge: 0,
+            taxAmount: 0,
+            total: sale.totalAmount,
+            currency: 'BDT',
+            codAmount: sale.codAmount || sale.totalAmount,
+            consignmentId: sale.consignmentId,
+            trackingCode: sale.trackingCode,
+            courierStatus: sale.courierStatus,
+            steadfastEntry: Boolean(sale.consignmentId),
+            notes: sale.note,
+            items: {
+              create: sale.items.map((item) => ({
+                productId: item.productId,
+                productName: item.productNameSnapshot,
+                productSku: item.productSkuSnapshot,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                totalPrice: item.lineTotal,
+              })),
+            },
+          },
+        });
+      } catch {
+        // Skip duplicate orderNumber if already exists
+      }
+    }
+  }
+
+  async bookSteadfastParcel(orderId: number) {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+
+    if (!order) {
+      throw new NotFoundError('Order not found');
+    }
+
+    const isMockConsignment = Boolean(order.consignmentId?.startsWith('SF-'));
+    if (order.steadfastEntry && order.consignmentId && !isMockConsignment) {
+      return order;
+    }
+
+    const apiKey = process.env.STEADFAST_API_KEY;
+    const secretKey = process.env.STEADFAST_SECRET_KEY;
+    const baseUrl = process.env.STEADFAST_BASE_URL || 'https://portal.packzy.com/api/v1';
+
+    let consignmentId: string;
+    let trackingCode: string;
+    let courierStatus: string = 'in_review';
+
+    const recipientName = (order.shippingName || 'Customer').slice(0, 100);
+    const recipientPhone = (order.shippingPhone || '01700000000').slice(0, 40);
+    const recipientAddress = (order.shippingAddress || 'Dhaka').slice(0, 490);
+    const codAmount = Number(order.codAmount || order.total || 0);
+    const invoice = order.orderNumber.slice(0, 100);
+    const note = (order.notes || '').slice(0, 480);
+
+    if (apiKey && secretKey) {
+      try {
+        const response = await fetch(`${baseUrl}/create_order`, {
+          method: 'POST',
+          headers: {
+            'Api-Key': apiKey,
+            'Secret-Key': secretKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            invoice,
+            recipient_name: recipientName,
+            recipient_phone: recipientPhone,
+            recipient_address: recipientAddress,
+            cod_amount: codAmount,
+            note: note || undefined,
+          }),
+        });
+
+        const resData = (await response.json()) as any;
+        if (!response.ok || (resData.status && resData.status !== 200 && resData.status !== 201)) {
+          throw new ConflictError(resData.message || 'Failed to book parcel on Steadfast');
+        }
+
+        const consignment = resData.consignment || {};
+        consignmentId = String(consignment.consignment_id || resData.consignment_id || Date.now());
+        trackingCode = consignment.tracking_code || resData.tracking_code || `ST-${consignmentId}`;
+        courierStatus = consignment.status || 'in_review';
+      } catch (err: any) {
+        if (err instanceof ConflictError) throw err;
+        throw new ConflictError(err?.message || 'Steadfast booking service error');
+      }
+    } else {
+      // Mock consignment generation when live API keys are not yet configured in environment
+      consignmentId = `SF-${Date.now().toString().slice(-6)}`;
+      trackingCode = `TRK-${consignmentId}`;
+      courierStatus = 'pending';
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const updatedOrder = await tx.order.update({
+        where: { id: orderId },
+        data: {
+          consignmentId,
+          trackingCode,
+          courierStatus,
+          steadfastEntry: true,
+          status: 'SHIPPED',
+          trackingEvents: {
+            create: {
+              status: 'SHIPPED',
+              title: 'Booked on Steadfast Courier',
+              description: `Consignment ID: ${consignmentId}, Tracking Code: ${trackingCode}`,
+            },
+          },
+        },
+        include: {
+          items: true,
+          customer: { include: { user: true } },
+          trackingEvents: true,
+        },
+      });
+
+      if (order.manualSaleId) {
+        await tx.manualSale.update({
+          where: { id: order.manualSaleId },
+          data: {
+            consignmentId,
+            trackingCode,
+            courierStatus,
+          },
+        });
+      }
+
+      return updatedOrder;
+    });
+
+    return updated;
+  }
+
+  async getSteadfastStatus(orderId: number) {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true, trackingEvents: true },
+    });
+
+    if (!order) {
+      throw new NotFoundError('Order not found');
+    }
+
+    if (!order.consignmentId && !order.trackingCode) {
+      throw new ConflictError('Order not yet entered into Steadfast');
+    }
+
+    const apiKey = process.env.STEADFAST_API_KEY;
+    const secretKey = process.env.STEADFAST_SECRET_KEY;
+    const baseUrl = process.env.STEADFAST_BASE_URL || 'https://portal.packzy.com/api/v1';
+
+    let liveStatus = order.courierStatus || 'pending';
+    let rawResponse: any = null;
+
+    if (apiKey && secretKey && order.consignmentId && !order.consignmentId.startsWith('SF-')) {
+      try {
+        let res = await fetch(`${baseUrl}/status_by_cid/${order.consignmentId}`, {
+          headers: {
+            'Api-Key': apiKey,
+            'Secret-Key': secretKey,
+          },
+        });
+
+        if (!res.ok && order.trackingCode) {
+          res = await fetch(`${baseUrl}/status_by_trackingcode/${order.trackingCode}`, {
+            headers: {
+              'Api-Key': apiKey,
+              'Secret-Key': secretKey,
+            },
+          });
+        }
+
+        if (res.ok) {
+          const resData = (await res.json()) as any;
+          rawResponse = resData;
+          if (resData.delivery_status) {
+            liveStatus = resData.delivery_status;
+          } else if (resData.status && typeof resData.status === 'string') {
+            liveStatus = resData.status;
+          }
+        }
+      } catch (err: any) {
+        console.error('Steadfast live status error:', err?.message);
+      }
+    }
+
+    let orderStatusUpdate: any = undefined;
+    if (liveStatus === 'delivered') {
+      orderStatusUpdate = 'DELIVERED';
+    } else if (liveStatus === 'cancelled') {
+      orderStatusUpdate = 'CANCELLED';
+    }
+
+    if (liveStatus !== order.courierStatus || orderStatusUpdate) {
+      await prisma.$transaction(async (tx) => {
+        await tx.order.update({
+          where: { id: orderId },
+          data: {
+            courierStatus: liveStatus,
+            ...(orderStatusUpdate ? { status: orderStatusUpdate } : {}),
+            trackingEvents: {
+              create: {
+                status: orderStatusUpdate || order.status,
+                title: `Steadfast Status: ${liveStatus}`,
+                description: `Live courier status updated to: ${liveStatus}`,
+              },
+            },
+          },
+        });
+
+        if (order.manualSaleId) {
+          await tx.manualSale.update({
+            where: { id: order.manualSaleId },
+            data: { courierStatus: liveStatus },
+          });
+        }
+      });
+    }
+
+    const finalOrder = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: true,
+        customer: { include: { user: true } },
+        trackingEvents: true,
+      },
+    });
+
+    return {
+      order: finalOrder,
+      liveStatus,
+      rawResponse,
+    };
+  }
+
+  async handleSteadfastWebhook(payload: any) {
+    const { consignment_id, invoice, status, tracking_message } = payload;
+    if (!consignment_id && !invoice) return null;
+
+    const order = await prisma.order.findFirst({
+      where: {
+        OR: [
+          ...(consignment_id ? [{ consignmentId: String(consignment_id) }] : []),
+          ...(invoice ? [{ orderNumber: String(invoice) }] : []),
+        ],
+      },
+    });
+
+    if (!order) return null;
+
+    let orderStatusUpdate: any = undefined;
+    if (status === 'delivered') orderStatusUpdate = 'DELIVERED';
+    else if (status === 'cancelled') orderStatusUpdate = 'CANCELLED';
+
+    await prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          courierStatus: status,
+          ...(orderStatusUpdate ? { status: orderStatusUpdate } : {}),
+          trackingEvents: {
+            create: {
+              status: orderStatusUpdate || order.status,
+              title: `Steadfast: ${status}`,
+              description: tracking_message || `Webhook update: ${status}`,
+            },
+          },
+        },
+      });
+
+      if (order.manualSaleId) {
+        await tx.manualSale.update({
+          where: { id: order.manualSaleId },
+          data: { courierStatus: status },
+        });
+      }
+    });
+
+    return order;
+  }
 }
 
 export default new OrderService();

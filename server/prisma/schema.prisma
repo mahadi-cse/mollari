@@ -395,13 +395,26 @@ model ManualSale {
   branchName  String?
   note        String?
   soldBy      String?
+
+  // Steadfast Courier & Delivery Fields
+  recipientName    String?
+  recipientPhone   String?
+  recipientAddress String?
+  codAmount        Decimal?         @default(0) @db.Decimal(12,2)
+  consignmentId    String?
+  trackingCode     String?
+  courierStatus    String?
+
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
   items       ManualSaleItem[]
+  order       Order?
 
   @@index([createdAt])
   @@index([branchId, createdAt])
+  @@index([trackingCode])
+  @@index([consignmentId])
 
   @@map("manual_sales")
 }
@@ -640,6 +653,15 @@ model Order {
   shippedAt       DateTime?
   deliveredAt     DateTime?
 
+  // Steadfast Courier & Tracking
+  consignmentId   String?
+  trackingCode    String?
+  courierStatus   String?
+  steadfastEntry  Boolean       @default(false)
+  codAmount       Decimal?      @db.Decimal(12,2)
+  manualSaleId    Int?          @unique
+  manualSale      ManualSale?   @relation(fields: [manualSaleId], references: [id], onDelete: SetNull)
+
   items           OrderItem[]
   payment         Payment?
   trackingEvents  OrderTrackingEvent[]
@@ -650,6 +672,8 @@ model Order {
   @@index([status])
   @@index([createdAt])
   @@index([channel])
+  @@index([trackingCode])
+  @@index([consignmentId])
   @@map("orders")
 }
 
